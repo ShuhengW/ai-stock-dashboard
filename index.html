@@ -1,0 +1,1434 @@
+<!DOCTYPE html><script type="application/json" id="cowork-artifact-meta">
+{
+  "name": "Ai Stock Dashboard",
+  "schemaVersion": 1,
+  "description": "AI产业链92只美股投资图谱 — 个股明细（价格/PE/EPS/目标价/评级/选择推荐）、每日新闻速递（带时间戳）、概览统计图表。支持按类别/选择/评级筛选和排序。"
+}
+</script>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Steven 股票舰队</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.js" integrity="sha384-iU8HYtnGQ8Cy4zl7gbNMOhsDTTKX02BTXptVP/vqAWIaTfM7isw76iyZCsjL2eVi" crossorigin="anonymous"></script>
+<style>
+:root { color-scheme: light; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; color: #1a1a2e; line-height: 1.5; }
+
+.header { background: linear-gradient(135deg, #1B2631 0%, #2C3E50 100%); color: white; padding: 20px 24px; }
+.header h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+.header .subtitle { font-size: 12px; opacity: 0.7; }
+.header .live-status { font-size: 11px; margin-top: 4px; display: flex; align-items: center; gap: 6px; }
+.header .live-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.header .live-dot.loading { background: #f39c12; animation: pulse 1s infinite; }
+.header .live-dot.live { background: #2ecc71; }
+.header .live-dot.cached { background: #95a5a6; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+.tabs { display: flex; background: #fff; border-bottom: 2px solid #e8e8e8; padding: 0 16px; position: sticky; top: 0; z-index: 100; }
+.tab { padding: 12px 20px; cursor: pointer; font-size: 14px; font-weight: 600; color: #666; border-bottom: 3px solid transparent; transition: all 0.2s; }
+.tab:hover { color: #333; }
+.tab.active { color: #1B2631; border-bottom-color: #3498db; }
+
+.controls { display: flex; gap: 10px; padding: 12px 16px; background: #fff; flex-wrap: wrap; align-items: center; border-bottom: 1px solid #eee; }
+.controls select, .controls input { padding: 6px 10px; border: 1px solid #d0d0d0; border-radius: 6px; font-size: 13px; background: #fff; }
+.controls input { width: 200px; }
+.controls label { font-size: 12px; color: #666; font-weight: 600; }
+.stat-badge { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; }
+
+.panel { display: none; }
+.panel.active { display: block; }
+
+/* Stock Table */
+.table-wrap { overflow-x: auto; padding: 0 8px 16px; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+thead th { background: #1B2631; color: #fff; padding: 10px 8px; text-align: center; font-weight: 600; font-size: 11px; cursor: pointer; white-space: nowrap; user-select: none; position: sticky; top: 0; z-index: 10; }
+thead th:hover { background: #2C3E50; }
+thead th .sort-arrow { margin-left: 3px; font-size: 9px; opacity: 0.5; }
+thead th.sorted .sort-arrow { opacity: 1; }
+tbody td { padding: 8px 6px; text-align: center; border-bottom: 1px solid #f0f0f0; white-space: nowrap; }
+tbody tr:hover { background: #f8f9ff; }
+tbody tr.cat-row { background: #f0f4f8; }
+tbody tr.cat-row td { font-weight: 700; font-size: 13px; padding: 10px 8px; color: #fff; text-align: left; }
+
+.ticker { font-weight: 700; color: #1a5276; }
+.green { color: #006400; }
+.red { color: #cc0000; }
+.orange { color: #e67e00; }
+.bold { font-weight: 700; }
+
+
+.rating-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; }
+.rating-sb { background: #e8f5e9; color: #006400; }
+.rating-b { background: #f1f8e9; color: #228b22; }
+.rating-h { background: #fff3e0; color: #ff8c00; }
+.rating-s { background: #ffebee; color: #cc0000; }
+.rating-ss { background: #fce4ec; color: #8b0000; }
+
+/* News */
+.news-section-title { padding: 12px 16px; font-size: 15px; font-weight: 700; color: #fff; margin: 8px 8px 0; border-radius: 8px 8px 0 0; }
+.news-section-title.macro { background: #2C3E50; }
+.news-section-title.stock { background: #34495E; }
+.news-card { background: #fff; margin: 0 8px; padding: 12px 16px; border-bottom: 1px solid #f0f0f0; display: flex; gap: 12px; align-items: flex-start; }
+.news-card:last-of-type { margin-bottom: 12px; border-radius: 0 0 8px 8px; }
+.news-time { font-size: 11px; color: #999; white-space: nowrap; min-width: 110px; padding-top: 2px; }
+.news-body { flex: 1; }
+.news-title { font-size: 13px; font-weight: 600; color: #1a1a2e; margin-bottom: 4px; cursor: pointer; }
+.news-title:hover { color: #3498db; text-decoration: underline; }
+.news-meta { font-size: 11px; color: #888; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.news-meta .source { color: #3498db; }
+.impact-tag { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 10px; font-weight: 700; }
+.impact-强利好 { background: #e8f5e9; color: #006400; }
+.impact-利好 { background: #f1f8e9; color: #228b22; }
+.impact-中性 { background: #fff3e0; color: #ff8c00; }
+.impact-利空 { background: #ffebee; color: #cc0000; }
+.impact-关注 { background: #e3f2fd; color: #0000ff; }
+
+.chart-container { padding: 16px; background: #fff; margin: 8px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+.chart-row { display: flex; gap: 8px; flex-wrap: wrap; padding: 8px; }
+.chart-box { flex: 1; min-width: 280px; background: #fff; border-radius: 8px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+.chart-box h3 { font-size: 13px; color: #555; margin-bottom: 10px; text-align: center; }
+
+.summary-cards { display: flex; gap: 8px; padding: 12px 8px; flex-wrap: wrap; }
+.summary-card { flex: 1; min-width: 100px; background: #fff; border-radius: 8px; padding: 14px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+.summary-card .num { font-size: 24px; font-weight: 800; }
+.summary-card .label { font-size: 11px; color: #888; margin-top: 2px; }
+
+.empty { text-align: center; color: #aaa; padding: 40px; font-size: 14px; }
+
+
+/* AI Supply Chain */
+.chain-wrap { padding: 16px; max-width: 1200px; margin: 0 auto; }
+.chain-intro { background: #fff; border-radius: 10px; padding: 16px 20px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+.chain-intro h2 { font-size: 15px; color: #1B2631; margin-bottom: 8px; }
+.chain-intro p { font-size: 13px; color: #555; line-height: 1.7; }
+.chain-layer { margin-bottom: 12px; }
+.chain-layer-title { font-size: 14px; font-weight: 800; color: #fff; padding: 10px 16px; border-radius: 8px 8px 0 0; display: flex; align-items: center; gap: 8px; }
+.chain-layer-title .layer-tag { font-size: 12px; background: rgba(255,255,255,0.25); padding: 2px 10px; border-radius: 10px; }
+.chain-layer-body { background: #fff; border-radius: 0 0 8px 8px; padding: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+.chain-category { margin-bottom: 10px; }
+.chain-category:last-child { margin-bottom: 0; }
+.chain-cat-name { font-size: 14px; font-weight: 700; margin-bottom: 6px; padding-left: 4px; display: flex; align-items: center; gap: 6px; }
+.chain-cat-name .cat-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.chain-stocks { display: flex; flex-wrap: wrap; gap: 6px; padding-left: 20px; }
+.chain-stock { display: inline-flex; align-items: center; gap: 6px; background: #f8f9fa; border: 1px solid #e8e8e8; border-radius: 6px; padding: 5px 10px; font-size: 13px; cursor: default; transition: all 0.15s; }
+.chain-stock:hover { background: #e8f0fe; border-color: #90caf9; }
+.chain-stock .cs-ticker { font-weight: 800; color: #1565C0; }
+.chain-stock .cs-name { color: #666; }
+.chain-stock .cs-desc { color: #999; font-size: 11px; }
+.chain-stock .cs-price { font-weight: 600; }
+.chain-stock .cs-chg { font-size: 12px; }
+.chain-arrow { text-align: center; font-size: 20px; color: #bbb; padding: 4px 0; }
+.chain-flow { margin: 20px 0; }
+.flow-pyramid { background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%); border-radius: 16px; padding: 28px 20px 20px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+.flow-pyramid-title { text-align: center; font-size: 15px; font-weight: 800; color: #1B2631; margin-bottom: 20px; letter-spacing: 1px; }
+.flow-layer { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-bottom: 0; }
+.flow-layer-label { text-align: center; font-size: 11px; font-weight: 700; color: #8899aa; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px; }
+.flow-box { background: #fff; border-radius: 12px; padding: 16px 14px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.06); border-top: 5px solid #ccc; transition: transform 0.15s, box-shadow 0.15s; min-width: 130px; }
+.flow-box:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.12); }
+.flow-box .fb-name { font-size: 14px; font-weight: 800; margin: 4px 0; }
+.flow-box .fb-count { font-size: 22px; font-weight: 900; }
+.flow-box .fb-chg { font-size: 14px; font-weight: 800; }
+.flow-box .fb-label { font-size: 9px; color: #aaa; margin-top: 2px; }
+.flow-arrow-row { text-align: center; padding: 6px 0; font-size: 20px; color: #c0c8d0; letter-spacing: 4px; }
+.flow-base { display: flex; justify-content: center; }
+.flow-base .flow-box { flex: 0 1 320px; }
+
+/* Company Profile Cards */
+.company-controls { display: flex; gap: 10px; padding: 12px 16px; background: #fff; flex-wrap: wrap; align-items: center; border-bottom: 1px solid #eee; }
+.company-controls select, .company-controls input { padding: 6px 10px; border: 1px solid #d0d0d0; border-radius: 6px; font-size: 13px; background: #fff; }
+.company-controls input { width: 220px; }
+.company-controls label { font-size: 12px; color: #666; font-weight: 600; }
+.company-grid { display: grid; grid-template-columns: 1fr; gap: 12px; padding: 12px 16px; }
+.company-card { background: #fff; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); overflow: hidden; transition: box-shadow 0.2s; }
+.company-card:hover { box-shadow: 0 3px 12px rgba(0,0,0,0.15); }
+.company-card-header { display: flex; align-items: center; gap: 12px; padding: 14px 16px; cursor: pointer; }
+.company-card-header .ticker-badge { font-size: 14px; font-weight: 800; color: #fff; background: #1B2631; padding: 6px 12px; border-radius: 6px; min-width: 60px; text-align: center; }
+.company-card-header .company-title { flex: 1; }
+.company-card-header .company-title h3 { font-size: 15px; font-weight: 700; color: #1a1a2e; margin-bottom: 2px; }
+.company-card-header .company-title .company-sub { font-size: 12px; color: #888; }
+.company-card-header .cat-label { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 12px; white-space: nowrap; }
+.company-card-header .toggle-icon { font-size: 16px; color: #aaa; transition: transform 0.2s; }
+.company-card.open .toggle-icon { transform: rotate(180deg); }
+.company-card-body { display: none; padding: 0 16px 16px; border-top: 1px solid #f0f0f0; }
+.company-card.open .company-card-body { display: block; }
+.profile-section { margin-top: 12px; }
+.profile-section h4 { font-size: 13px; font-weight: 700; color: #1B2631; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+.profile-section h4 .icon { font-size: 14px; }
+.profile-section p { font-size: 12.5px; color: #444; line-height: 1.7; }
+.profile-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.profile-tag { font-size: 11px; padding: 3px 10px; border-radius: 12px; background: #f0f4f8; color: #333; font-weight: 500; }
+.profile-tag.green { background: #e8f5e9; color: #1B5E20; }
+.profile-tag.red { background: #ffebee; color: #b71c1c; }
+.profile-tag.blue { background: #e3f2fd; color: #0D47A1; }
+.profile-bullets { list-style: none; padding: 0; margin: 6px 0 0 0; }
+.profile-bullets li { font-size: 12px; line-height: 1.7; padding: 4px 0 4px 20px; position: relative; color: #444; }
+.profile-bullets li::before { content: ''; position: absolute; left: 4px; top: 11px; width: 8px; height: 8px; border-radius: 50%; }
+.profile-bullets.blue li::before { background: #1565C0; }
+.pos-badge { display: inline-block; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 8px; margin: 0 2px; background: #FFF3E0; color: #E65100; border: 1px solid #FFB74D; white-space: nowrap; }
+.profile-bullets.green li::before { background: #2E7D32; }
+.profile-bullets.red li::before { background: #C62828; }
+.profile-bullets.blue li { border-bottom: 1px solid #e3f2fd; }
+.profile-bullets.green li { border-bottom: 1px solid #e8f5e9; }
+.profile-bullets.red li { border-bottom: 1px solid #ffebee; }
+.profile-bullets li:last-child { border-bottom: none; }
+.overview-bullets { list-style: none; padding: 0; margin: 6px 0 0 0; }
+.overview-bullets li { font-size: 12.5px; line-height: 1.8; padding: 5px 0 5px 22px; position: relative; color: #444; border-bottom: 1px solid #f0f0f0; }
+.overview-bullets li:last-child { border-bottom: none; }
+.overview-bullets li::before { content: '▸'; position: absolute; left: 4px; top: 5px; color: #1565C0; font-size: 14px; font-weight: 700; }
+.profile-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-top: 8px; }
+.profile-meta-item { background: #f8f9fa; border-radius: 6px; padding: 8px 10px; text-align: center; }
+.profile-meta-item .val { font-size: 14px; font-weight: 700; color: #1B2631; }
+.profile-meta-item .lbl { font-size: 10px; color: #888; margin-top: 2px; }
+
+.chain-detail { background: #f8fafb; border-radius: 8px; padding: 14px 16px; margin: 8px 0 6px 20px; border-left: 3px solid #ddd; }
+.chain-detail-title { font-size: 14px; font-weight: 700; color: #333; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+.chain-detail-title .detail-icon { font-size: 14px; }
+.chain-detail p { font-size: 13px; color: #555; line-height: 1.8; margin: 0 0 8px 0; }
+.chain-detail p:last-child { margin-bottom: 0; }
+.chain-detail .detail-label { font-weight: 700; color: #333; margin-right: 4px; }
+.chain-detail .product-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+.chain-detail .product-tag { display: inline-block; background: #e8f0fe; color: #1565C0; font-size: 12px; padding: 3px 10px; border-radius: 12px; font-weight: 500; }
+.chain-parallel { display: flex; flex-direction: column; gap: 12px; margin-bottom: 12px; }
+.chain-parallel > .chain-parallel-col { flex: 1; }
+.chain-parallel-label { text-align: center; font-size: 14px; font-weight: 800; color: #FF6F00; margin-bottom: 8px; padding: 6px 12px; background: #FFF3E0; border-radius: 8px; border: 2px dashed #FF6F00; }
+@media(max-width:900px) { .chain-parallel { flex-direction: column; } }
+
+.news-section { margin-top: 10px; }
+.news-section h4 { font-size: 13px; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+.news-section h4 .icon { font-size: 15px; }
+.news-item { display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px; background: #f8fafb; border-radius: 6px; margin-bottom: 6px; border-left: 3px solid #1565C0; }
+.news-item:nth-child(odd) { border-left-color: #00695C; }
+.news-item .news-date { font-size: 11px; color: #999; white-space: nowrap; min-width: 65px; padding-top: 2px; }
+.news-item .news-body { flex: 1; }
+.news-item .news-title { font-size: 12px; color: #333; line-height: 1.5; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+.news-item .news-title:hover { color: #1565C0; }
+.news-item .news-title .toggle { font-size: 10px; color: #aaa; transition: transform 0.2s; flex-shrink: 0; }
+.news-item.open .news-title .toggle { transform: rotate(90deg); color: #1565C0; }
+.news-item .news-summary { display: none; font-size: 11.5px; color: #555; line-height: 1.7; margin-top: 6px; padding: 8px 10px; background: #f0f4f8; border-radius: 6px; }
+.news-item.open .news-summary { display: block; }
+.news-item .news-pub { font-size: 10px; color: #999; margin-top: 2px; }
+.profile-section.overview-section p { line-height: 1.8; font-size: 12.5px; color: #444; }
+.profile-subsection { margin-top: 8px; }
+.profile-subsection-title { font-size: 12px; font-weight: 700; color: #1565C0; margin-bottom: 4px; display: flex; align-items: center; gap: 4px; }
+.profile-kpi { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.profile-kpi-item { background: #f0f4ff; border-radius: 6px; padding: 6px 12px; text-align: center; min-width: 80px; }
+.profile-kpi-item .kpi-val { font-size: 14px; font-weight: 800; color: #1565C0; }
+.profile-kpi-item .kpi-label { font-size: 10px; color: #888; margin-top: 2px; }
+.pl-table-wrap { overflow-x: auto; margin-top: 8px; border-radius: 8px; border: 1px solid #e8e8e8; }
+.pl-table { min-width: 900px; width: 100%; border-collapse: collapse; font-size: 13px; }
+.pl-table th { background: #f0f4f8; padding: 8px 12px; text-align: center; font-weight: 700; color: #333; border-bottom: 2px solid #ddd; font-size: 13px; white-space: nowrap; }
+.pl-table td { padding: 8px 12px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
+.pl-table tr:hover { background: #f8f9ff; }
+.pl-name { font-weight: 700; color: #1B2631; text-align: center; white-space: nowrap; position: sticky; left: 0; background: #fff; z-index: 1; box-shadow: 2px 0 4px rgba(0,0,0,0.06); }
+.pl-table tr:hover .pl-name { background: #f8f9ff; }
+.pl-table th:first-child { position: sticky; left: 0; background: #f0f4f8; z-index: 2; box-shadow: 2px 0 4px rgba(0,0,0,0.06); }
+.pl-desc { font-size: 12px; color: #555; line-height: 1.6; text-align: left; min-width: 300px; }
+.pl-leader { font-weight: 600; color: #1565C0; text-align: center; white-space: nowrap; font-size: 13px; }
+.pl-challenger { color: #666; font-size: 13px; text-align: center; white-space: nowrap; }
+/* Changelog */
+.log-entry { background: #fff; border-radius: 10px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); overflow: hidden; }
+.log-header { display: flex; align-items: center; gap: 12px; padding: 14px 18px; cursor: pointer; border-bottom: 1px solid #f0f0f0; }
+.log-header:hover { background: #f8f9ff; }
+.log-date { font-size: 15px; font-weight: 800; color: #1B2631; }
+.log-date-sub { font-size: 12px; color: #888; }
+.log-summary { display: flex; gap: 10px; margin-left: auto; flex-wrap: wrap; }
+.log-badge { font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 12px; }
+.log-badge.price { background: #e3f2fd; color: #1565C0; }
+.log-badge.news { background: #e8f5e9; color: #1B5E20; }
+.log-badge.up { background: #e8f5e9; color: #006400; }
+.log-badge.down { background: #ffebee; color: #cc0000; }
+.log-toggle { font-size: 14px; color: #aaa; transition: transform 0.2s; }
+.log-entry.open .log-toggle { transform: rotate(180deg); }
+.log-body { display: none; padding: 0 18px 16px; }
+.log-entry.open .log-body { display: block; }
+.log-section { margin-top: 12px; }
+.log-section h4 { font-size: 13px; font-weight: 700; color: #1B2631; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+.log-price-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px; }
+.log-price-item { display: flex; justify-content: space-between; padding: 4px 10px; background: #f8f9fa; border-radius: 6px; font-size: 12px; }
+.log-price-item .ticker { font-weight: 700; color: #1565C0; }
+.log-news-item { padding: 8px 12px; background: #f8fafb; border-radius: 6px; margin-bottom: 6px; border-left: 3px solid #1565C0; }
+.log-news-item .news-ticker { font-size: 11px; font-weight: 700; color: #1565C0; margin-bottom: 2px; }
+.log-news-item .news-title { font-size: 12px; color: #333; line-height: 1.5; }
+
+.sector-perf { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; margin-left: auto; padding: 3px 10px; border-radius: 8px; background: rgba(255,255,255,0.15); }
+</style>
+</head>
+<body>
+<body>
+
+<div class="header">
+  <h1>Steven 股票舰队</h1>
+  <div class="subtitle" id="updateInfo"><span id="stockCount"></span>只股票 · 数据来源: TradingView · 每日收盘更新</div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('stocks')">股票行情</div>
+  <div class="tab" onclick="switchTab('company')">公司详情</div>
+  <div class="tab" onclick="switchTab('chain')">AI产业链</div>
+  <div class="tab" onclick="switchTab('changelog')">更新日志</div>
+</div>
+
+<!-- STOCKS PANEL -->
+<div class="panel active" id="panel-stocks">
+  <div class="controls">
+    <label>类别</label>
+    <select id="filterCat" onchange="renderTable()"><option value="">全部</option></select>
+    <input type="text" id="searchBox" placeholder="搜索代码或公司名..." oninput="renderTable()">
+    <span class="stat-badge" style="background:#e8f5e9;color:#006400" id="countBadge"></span>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead id="stockHead"></thead>
+      <tbody id="stockBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- NEWS PANEL -->
+<div class="panel" id="panel-news">
+  <div class="controls">
+    <label>影响</label>
+    <select id="filterImpact" onchange="renderNews()">
+      <option value="">全部</option>
+      <option value="强利好">强利好</option>
+      <option value="利好">利好</option>
+      <option value="中性">中性</option>
+      <option value="利空">利空</option>
+    </select>
+    <input type="text" id="newsSearch" placeholder="搜索新闻..." oninput="renderNews()">
+  </div>
+  <div id="newsContainer"></div>
+</div>
+
+<!-- OVERVIEW PANEL -->
+<div class="panel" id="panel-overview">
+  <div class="summary-cards" id="summaryCards"></div>
+  <div class="chart-row">
+    <div class="chart-box"><h3>按类别分布</h3><canvas id="chartCat"></canvas></div>
+  </div>
+  <div class="chart-row">
+    <div class="chart-box"><h3>涨跌分布 (当日)</h3><canvas id="chartChange"></canvas></div>
+  </div>
+</div>
+
+
+<!-- AI SUPPLY CHAIN PANEL -->
+<div class="panel" id="panel-chain">
+  <div class="chain-wrap">
+    <div class="chain-intro">
+      <h2>AI产业链全景图</h2>
+      <p>AI基础设施是一个复杂的生态系统。<strong>上游</strong>提供制造工具和材料；<strong>中游</strong>四大核心组件——计算芯片、网络与光通信、存储与内存、显示技术——处于<strong>同一层级</strong>，它们是并列关系而非上下游，缺一不可；<strong>下游</strong>系统集成商将这些组件组装为完整的AI服务器和数据中心；<strong>能源</strong>作为底层基础设施贯穿全链。Steven 股票舰队的48只股票覆盖了这条产业链的每个关键环节。</p>
+    </div>
+
+    <div class="chain-flow" id="chainFlow"></div>
+
+    <!-- ═══════════════ 上游：半导体设备与制造 ═══════════════ -->
+    <div class="chain-layer">
+      <div class="chain-layer-title" style="background:linear-gradient(135deg,#784212,#A1887F)">
+        <span>🔧</span> 上游：半导体设备与制造
+        <span class="layer-tag">制造基础</span>
+      </div>
+      <div class="chain-layer-body">
+        <div class="chain-category">
+          <div class="chain-cat-name"><span class="cat-dot" style="background:#784212"></span>半导体设备与制造</div>
+          <div class="chain-stocks" id="chain-半导体设备与制造"></div>
+          <div class="chain-detail" style="border-left-color:#784212">
+            <div class="chain-detail-title"><span class="detail-icon">🏭</span>在产业链中的角色</div>
+            <p>半导体设备与制造处于AI产业链的<strong>最上游</strong>，是"卖铲人"——无论AI芯片谁赢，设备商都赚钱。所有芯片都需经过光刻→蚀刻→沉积→检测→封装流程，每个环节都由少数几家公司垄断。AI芯片制程向3nm/2nm推进，设备复杂度和单价持续攀升，ASML的EUV光刻机单台售价超过$3亿。先进封装(CoWoS)是当前最大瓶颈——NVIDIA的B200需要将GPU和HBM封装在一起，台积电CoWoS产能严重不足，成为AI产业链最紧缺的环节之一。此外，化合物半导体(GaAs/InP)衬底支撑着光通信激光器的制造，也是AI基础设施不可或缺的上游材料。</p>
+            <div class="chain-detail-title"><span class="detail-icon">📊</span>产品线、行业龙头与关注覆盖</div>
+            <div class="pl-table-wrap"><table class="pl-table">
+              <tr><th>产品线</th><th>简介</th><th>全球龙头</th><th>其他主要玩家</th></tr>
+              <tr><td class="pl-name">EUV光刻机</td><td class="pl-desc">用极紫外光在晶圆上刻出纳米级电路图案，是制造7nm以下先进芯片的唯一手段。🔥AI芯片制程竞赛的绝对瓶颈。</td><td class="pl-leader">ASML (垄断)</td><td class="pl-challenger">无竞争者，全球唯一EUV供应商</td></tr>
+              <tr><td class="pl-name">薄膜沉积设备</td><td class="pl-desc">在晶圆表面逐层沉积导电/绝缘薄膜，构建芯片的多层互连结构。AI芯片层数越来越多，沉积需求持续增长。</td><td class="pl-leader">Applied Materials / Lam Research</td><td class="pl-challenger">TEL (东京电子)</td></tr>
+              <tr><td class="pl-name">刻蚀设备</td><td class="pl-desc">将光刻图案转移到晶圆上，精确去除多余材料。3D NAND和先进逻辑芯片推动刻蚀步骤数大幅增加。</td><td class="pl-leader">Lam Research / TEL</td><td class="pl-challenger">Applied Materials</td></tr>
+              <tr><td class="pl-name">晶圆检测/量测</td><td class="pl-desc">在制造过程中检测缺陷、量测尺寸，保证良率。先进制程容错率极低，检测设备变得越来越关键。</td><td class="pl-leader">KLA Corp (KLAC ✅) 份额>50%</td><td class="pl-challenger">Applied Materials, 日立高新</td></tr>
+              <tr><td class="pl-name">光掩膜(Photomask)</td><td class="pl-desc">光刻的'底片'，承载电路图案。EUV光掩膜制造难度极高，是芯片量产的必要前置环节。</td><td class="pl-leader">Photronics (PLAB ✅) / 大日本印刷</td><td class="pl-challenger">Toppan</td></tr>
+              <tr><td class="pl-name">先进封装(CoWoS/2.5D/3D)</td><td class="pl-desc">🔥当前最热赛道之一。将多个芯片(GPU+HBM)封装在一起，是NVIDIA B200等AI芯片的关键工艺，产能严重供不应求。</td><td class="pl-leader">台积电 TSMC (垄断级)</td><td class="pl-challenger">ASE (#1封测), Amkor (AMKR ✅) (#2)</td></tr>
+              <tr><td class="pl-name">晶圆代工</td><td class="pl-desc">按客户设计制造芯片。台积电垄断先进制程(3nm/2nm)，所有AI芯片公司都依赖代工。🔥地缘政治焦点。</td><td class="pl-leader">台积电 TSMC (>60%先进制程)</td><td class="pl-challenger">Samsung Foundry, Intel (INTC ✅) Foundry</td></tr>
+              <tr><td class="pl-name">化合物半导体衬底</td><td class="pl-desc">GaAs/InP等特殊材料衬底，用于制造光通信激光器和射频芯片。AI带动光通信需求爆发。</td><td class="pl-leader">住友电工 / II-VI (Coherent)</td><td class="pl-challenger">AXT (AXTI ✅), Aeluma (ALMU ✅)</td></tr>
+              <tr><td class="pl-name">高端PCB</td><td class="pl-desc">承载芯片的高密度多层印刷电路板。AI服务器需要更高层数、更精密的PCB，单机价值量大幅提升。</td><td class="pl-leader">臻鼎(Zhen Ding) / 欣兴</td><td class="pl-challenger">TTM (TTMI ✅), AT&S</td></tr>
+              <tr><td class="pl-name">电子制造服务EMS</td><td class="pl-desc">为品牌商代工组装整机(服务器/交换机等)。AI服务器订单暴增，EMS厂商产能紧张。</td><td class="pl-leader">鸿海Foxconn / Jabil</td><td class="pl-challenger">Sanmina (SANM ✅), Celestica (CLS ✅), Flex</td></tr>
+              <tr><td class="pl-name">GaN功率芯片</td><td class="pl-desc">氮化镓功率器件，效率远高于传统硅。用于AI服务器电源和快充，🔥高效供电是数据中心降本关键。</td><td class="pl-leader">Navitas (NVTS ✅) / Infineon</td><td class="pl-challenger">EPC, Texas Instruments</td></tr>
+              <tr><td class="pl-name">LoRa/模拟混合信号</td><td class="pl-desc">LoRa是低功耗远程通信技术，用于IoT传感器联网。AI边缘计算+智慧城市推动需求增长。</td><td class="pl-leader">Semtech (SMTC ✅) LoRa垄断</td><td class="pl-challenger">TI, ADI (模拟芯片龙头)</td></tr>
+            </table></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="chain-arrow">▼ 提供设备、材料与制造服务</div>
+
+    <!-- ═══════════════ 中游：四大核心组件（并列） ═══════════════ -->
+    <div class="chain-parallel-label">⚡ 中游：四大核心组件 —— 同一层级，并列关系，缺一不可</div>
+
+    <div class="chain-parallel">
+      <!-- ——— 列1：计算芯片 ——— -->
+      <div class="chain-parallel-col">
+        <div class="chain-layer" style="margin-bottom:0">
+          <div class="chain-layer-title" style="background:linear-gradient(135deg,#D32F2F,#E53935)">
+            <span>🧠</span> 计算芯片
+            <span class="layer-tag">负责"算"</span>
+          </div>
+          <div class="chain-layer-body">
+            <div class="chain-category">
+              <div class="chain-cat-name"><span class="cat-dot" style="background:#D32F2F"></span>AI计算芯片</div>
+              <div class="chain-stocks" id="chain-AI计算芯片"></div>
+              <div class="chain-detail" style="border-left-color:#D32F2F">
+                <div class="chain-detail-title"><span class="detail-icon">🎯</span>在产业链中的角色</div>
+                <p>计算芯片是AI系统的<strong>"大脑"</strong>，直接执行深度学习的训练和推理运算，是整条产业链中价值最高、市值最大的环节。训练一个GPT-4级别的大模型需要数万块NVIDIA H100 GPU，单次训练成本超过$1亿，NVIDIA凭借CUDA软件生态垄断了80%以上的AI训练市场。AMD的MI300X是最有力的挑战者，凭借更大的HBM容量在推理场景获得一席之地。CPU虽然不直接做AI计算，但作为服务器的"管家"负责数据预处理和任务调度，AMD EPYC正在快速蚕食Intel的数据中心份额。定制ASIC(如Google TPU)是另一条路线，大厂通过Broadcom/Marvell设计专用AI芯片来降低对NVIDIA的依赖。</p>
+                <div class="chain-detail-title"><span class="detail-icon">📊</span>产品线、行业龙头与关注覆盖</div>
+                <div class="pl-table-wrap"><table class="pl-table">
+                  <tr><th>产品线</th><th>简介</th><th>全球龙头</th><th>其他主要玩家</th></tr>
+                  <tr><td class="pl-name">AI训练/推理GPU</td><td class="pl-desc">🔥AI产业链核心中的核心。GPU提供大规模并行算力，是训练大模型(GPT/Llama)和推理服务的主力硬件。NVIDIA H100/B200统治市场。</td><td class="pl-leader">NVIDIA (NVDA ✅, >80%份额, H100/B200)</td><td class="pl-challenger">AMD ✅ MI300X (#2), Intel (INTC ✅) Gaudi (#3)</td></tr>
+                  <tr><td class="pl-name">数据中心CPU</td><td class="pl-desc">服务器的'管家'，负责调度任务、数据预处理。AMD EPYC凭性价比快速抢占Intel份额，是AI服务器标配。</td><td class="pl-leader">AMD ✅ EPYC (份额>30%且增长)</td><td class="pl-challenger">Intel (INTC ✅) Xeon (曾经龙头，份额被蚕食)</td></tr>
+                  <tr><td class="pl-name">CPU架构IP授权</td><td class="pl-desc">ARM授权CPU指令集架构，手机芯片几乎100%用ARM。🔥ARM架构正进军数据中心(AWS Graviton/NVIDIA Grace)。</td><td class="pl-leader">ARM (垄断移动端)</td><td class="pl-challenger">RISC-V (开源挑战者)</td></tr>
+                  <tr><td class="pl-name">FPGA</td><td class="pl-desc">可编程逻辑芯片，灵活性强。用于AI推理加速、网络功能虚拟化、算法原型验证等场景。</td><td class="pl-leader">AMD ✅/Xilinx (#1)</td><td class="pl-challenger">Intel (INTC ✅)/Altera (#2), Lattice</td></tr>
+                  <tr><td class="pl-name">移动SoC</td><td class="pl-desc">手机/平板的核心处理器，集成CPU/GPU/NPU。🔥端侧AI(手机AI助手)推动NPU算力军备竞赛。</td><td class="pl-leader">Qualcomm Snapdragon</td><td class="pl-challenger">Apple (自研), MediaTek</td></tr>
+                  <tr><td class="pl-name">存内计算推理</td><td class="pl-desc">将计算直接嵌入存储器，大幅减少数据搬运能耗。🔥前沿研究方向，有望颠覆传统冯·诺依曼架构。</td><td class="pl-leader">GSI Technology (GSIT ✅) 先驱</td><td class="pl-challenger">极小众赛道，商业化早期</td></tr>
+                </table></div>
+              </div>
+            </div>
+            <div class="chain-category" style="margin-top:12px">
+              <div class="chain-cat-name"><span class="cat-dot" style="background:#1565C0"></span>AI网络芯片</div>
+              <div class="chain-stocks" id="chain-AI网络芯片"></div>
+              <div class="chain-detail" style="border-left-color:#1565C0">
+                <div class="chain-detail-title"><span class="detail-icon">🎯</span>在产业链中的角色</div>
+                <p>AI网络芯片是GPU集群的<strong>"交通枢纽"</strong>——如果GPU是大脑，网络就是神经系统，负责在数千块GPU之间高速传输数据。训练大模型时GPU之间需要频繁同步梯度参数，网络瓶颈会让昂贵的GPU空等(GPU utilization下降)，因此网络性能直接决定了整个集群的实际算力效率。NVIDIA的NVLink/NVSwitch提供GPU专用高速互连(900GB/s)，形成强大护城河；Broadcom的Tomahawk交换芯片则统治了以太网交换市场(70%+份额)。新兴赛道包括：Credo的AEC(有源以太网电缆)用更低成本实现短距离高速互连，Astera Labs的CXL重定时器为下一代内存互连标准铺路。网络芯片是AI基础设施中增长最快的细分领域之一。</p>
+                <div class="chain-detail-title"><span class="detail-icon">📊</span>产品线、行业龙头与关注覆盖</div>
+                <div class="pl-table-wrap"><table class="pl-table">
+                  <tr><th>产品线</th><th>简介</th><th>全球龙头</th><th>其他主要玩家</th></tr>
+                  <tr><td class="pl-name">数据中心交换芯片</td><td class="pl-desc">数据中心网络的'路由中枢'，决定GPU集群间的通信带宽。🔥AI集群规模越大，对交换带宽要求越高(51.2T+)。</td><td class="pl-leader">Broadcom (AVGO ✅) 份额>70%</td><td class="pl-challenger">NVIDIA (NVDA ✅) Spectrum, Cisco</td></tr>
+                  <tr><td class="pl-name">GPU专用互连(NVLink)</td><td class="pl-desc">🔥NVIDIA自研的GPU直连技术，带宽远超以太网。是万卡GPU集群训练大模型的关键，形成强大护城河。</td><td class="pl-leader">NVIDIA (NVDA ✅) NVLink/NVSwitch (垄断)</td><td class="pl-challenger">无直接竞争者</td></tr>
+                  <tr><td class="pl-name">定制AI加速器ASIC</td><td class="pl-desc">🔥为Google TPU/Meta等大厂定制的AI芯片，性价比优于通用GPU。Broadcom和Marvell是主要设计方。</td><td class="pl-leader">Broadcom (AVGO ✅)</td><td class="pl-challenger">Marvell (MRVL ✅) #2</td></tr>
+                  <tr><td class="pl-name">光学DSP (PAM4)</td><td class="pl-desc">将电信号调制为PAM4光信号的数字信号处理芯片。800G/1.6T光模块的核心器件，技术壁垒高。</td><td class="pl-leader">Broadcom (AVGO ✅) / Marvell (MRVL ✅)</td><td class="pl-challenger">Credo (CRDO ✅), MaxLinear</td></tr>
+                  <tr><td class="pl-name">有源以太网电缆AEC</td><td class="pl-desc">🔥新兴赛道。短距离高速互连用铜缆+芯片方案，比光模块成本低、功耗低，AI集群内部rack间连接增长快。</td><td class="pl-leader">Credo (CRDO ✅) 新兴龙头</td><td class="pl-challenger">Broadcom (AVGO ✅), TE Connectivity</td></tr>
+                  <tr><td class="pl-name">PCIe/CXL重定时器</td><td class="pl-desc">🔥前沿赛道。CXL是下一代内存互连标准，让CPU/GPU共享内存池。重定时器保证信号完整性。</td><td class="pl-leader">Astera Labs (ALAB ✅) 先发</td><td class="pl-challenger">Broadcom (AVGO ✅), TI, Renesas</td></tr>
+                </table></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ——— 列2：光通信 ——— -->
+      <div class="chain-parallel-col">
+        <div class="chain-layer" style="margin-bottom:0">
+          <div class="chain-layer-title" style="background:linear-gradient(135deg,#00695C,#00897B)">
+            <span>🔗</span> 网络与光通信
+            <span class="layer-tag">负责"连"</span>
+          </div>
+          <div class="chain-layer-body">
+            <div class="chain-category">
+              <div class="chain-cat-name"><span class="cat-dot" style="background:#00695C"></span>光通信</div>
+              <div class="chain-stocks" id="chain-光通信"></div>
+              <div class="chain-detail" style="border-left-color:#00695C">
+                <div class="chain-detail-title"><span class="detail-icon">🎯</span>在产业链中的角色</div>
+                <p>光通信是AI数据中心的<strong>"神经网络"</strong>，负责在机架之间和数据中心之间传输海量数据。电信号在超过几米的距离后就会严重衰减，因此GPU集群内的跨机架通信和数据中心间的远程传输都必须依赖光信号。AI集群规模从千卡扩展到万卡甚至十万卡，光模块需求呈指数级增长——从400G快速升级到800G，1.6T光模块预计2026年下半年量产。光纤是物理传输介质，每建一个大型AI数据中心就需要铺设数百公里光纤，Corning(康宁)作为全球最大光纤厂商直接受益。前沿方向包括硅光子集成(POET)和共封装光学(CPO)，目标是把光模块直接集成到交换芯片旁边，大幅降低功耗和成本。</p>
+                <div class="chain-detail-title"><span class="detail-icon">📊</span>产品线、行业龙头与关注覆盖</div>
+                <div class="pl-table-wrap"><table class="pl-table">
+                  <tr><th>产品线</th><th>简介</th><th>全球龙头</th><th>其他主要玩家</th></tr>
+                  <tr><td class="pl-name">800G/1.6T光模块</td><td class="pl-desc">🔥当前最热光通信赛道。AI数据中心GPU互连从400G升级到800G/1.6T，光模块需求呈指数增长。</td><td class="pl-leader">Coherent (COHR ✅) / Lumentum (LITE ✅)</td><td class="pl-challenger">中际旭创, 新易盛 (中国厂商增长)</td></tr>
+                  <tr><td class="pl-name">光网络设备(DCI)</td><td class="pl-desc">数据中心之间的长距离光传输设备(相干光)。AI训练数据跨数据中心传输推动DCI扩容。</td><td class="pl-leader">Ciena (CIEN ✅) WaveLogic</td><td class="pl-challenger">华为, Nokia, Infinera</td></tr>
+                  <tr><td class="pl-name">光纤</td><td class="pl-desc">光信号传输的物理介质。每建一个AI数据中心需要数百公里光纤，需求量级前所未有。</td><td class="pl-leader">Corning (GLW ✅) 全球#1</td><td class="pl-challenger">长飞光纤, Furukawa</td></tr>
+                  <tr><td class="pl-name">ROADM/WSS</td><td class="pl-desc">可重构光分插复用器，实现光网络的灵活调度。是运营商和云厂商骨干网升级的关键设备。</td><td class="pl-leader">Lumentum (LITE ✅) 绝对龙头</td><td class="pl-challenger">Viavi, Santec</td></tr>
+                  <tr><td class="pl-name">光收发器/AOC</td><td class="pl-desc">将电信号转换为光信号的短距离模块。AI服务器内部和机架间大量使用。</td><td class="pl-leader">AAOI ✅ / Coherent</td><td class="pl-challenger">Broadcom (AVGO ✅), Cisco</td></tr>
+                  <tr><td class="pl-name">光子集成平台</td><td class="pl-desc">🔥前沿方向。将多个光学元件集成在一个芯片上(类似电子IC)，大幅降低光模块成本和功耗。</td><td class="pl-leader">POET ✅ Technologies 先驱</td><td class="pl-challenger">Intel (INTC ✅) 硅光, Cisco/Acacia</td></tr>
+                  <tr><td class="pl-name">电光聚合物调制器</td><td class="pl-desc">🔥前沿材料。用有机聚合物替代传统LiNbO3调制器，速度更快、功耗更低，仍在研发阶段。</td><td class="pl-leader">Lightwave Logic (LWLG ✅) 唯一</td><td class="pl-challenger">极小众, 研发阶段</td></tr>
+                </table></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="chain-parallel">
+      <!-- ——— 列3：存储与内存 ——— -->
+      <div class="chain-parallel-col">
+        <div class="chain-layer" style="margin-bottom:0">
+          <div class="chain-layer-title" style="background:linear-gradient(135deg,#4A148C,#6A1B9A)">
+            <span>💾</span> 存储与内存
+            <span class="layer-tag">负责"存"</span>
+          </div>
+          <div class="chain-layer-body">
+            <div class="chain-category">
+              <div class="chain-cat-name"><span class="cat-dot" style="background:#4A148C"></span>存储与内存</div>
+              <div class="chain-stocks" id="chain-存储与内存"></div>
+              <div class="chain-detail" style="border-left-color:#4A148C">
+                <div class="chain-detail-title"><span class="detail-icon">🎯</span>在产业链中的角色</div>
+                <p>存储与内存是AI系统的<strong>"记忆体"</strong>，决定了模型能有多大、数据能处理多快。HBM(高带宽内存)是当前AI芯片最关键的配套——NVIDIA H100配备80GB HBM3，B200配备192GB HBM3e，HBM堆叠在GPU旁边提供超过1TB/s的带宽，没有HBM就无法运行大模型。全球HBM市场被SK Hynix(>50%)、Samsung和Micron三家垄断，产能严重供不应求，是AI产业链仅次于先进封装的第二大瓶颈。DDR5内存用于服务器主存，AI推理时需要大量DRAM来缓存模型参数。NAND闪存(SSD)则用于存储TB到PB级的训练数据集和模型检查点，企业级SSD需求正在爆发。Rambus的内存接口芯片垄断了DDR5信号完整性市场(>90%份额)，是一个隐形但关键的环节。</p>
+                <div class="chain-detail-title"><span class="detail-icon">📊</span>产品线、行业龙头与关注覆盖</div>
+                <div class="pl-table-wrap"><table class="pl-table">
+                  <tr><th>产品线</th><th>简介</th><th>全球龙头</th><th>其他主要玩家</th></tr>
+                  <tr><td class="pl-name">HBM高带宽内存</td><td class="pl-desc">🔥AI芯片最关键的配套。HBM堆叠在GPU旁边提供超高带宽(>1TB/s)，是NVIDIA H100/B200的必需品。严重供不应求。</td><td class="pl-leader">SK Hynix (#1, >50%)</td><td class="pl-challenger">Samsung (#2), Micron (MU ✅, #3)</td></tr>
+                  <tr><td class="pl-name">DRAM</td><td class="pl-desc">服务器主内存(DDR5)。AI推理需要大量DRAM缓存模型参数，DDR5升级周期+AI需求双重驱动。</td><td class="pl-leader">Samsung (~40%份额)</td><td class="pl-challenger">SK Hynix, Micron (MU ✅)</td></tr>
+                  <tr><td class="pl-name">NAND闪存</td><td class="pl-desc">固态存储芯片(SSD核心)。AI训练数据集和模型检查点存储需求巨大，企业级SSD需求爆发。</td><td class="pl-leader">Samsung / Kioxia-WDC ✅</td><td class="pl-challenger">SK Hynix, MU ✅, SNDK ✅</td></tr>
+                  <tr><td class="pl-name">内存接口芯片</td><td class="pl-desc">DRAM和CPU之间的'翻译器'，保证信号完整性。DDR5每通道必须配一颗，Rambus垄断90%+份额。</td><td class="pl-leader">Rambus (RMBS ✅) 垄断>90%</td><td class="pl-challenger">Montage (澜起科技)</td></tr>
+                  <tr><td class="pl-name">SSD控制器</td><td class="pl-desc">SSD的'大脑'，管理NAND读写和纠错。AI存储对IOPS和可靠性要求极高，控制器至关重要。</td><td class="pl-leader">Silicon Motion (SIMO ✅)</td><td class="pl-challenger">Phison, Samsung (自研)</td></tr>
+                  <tr><td class="pl-name">HDD硬盘</td><td class="pl-desc">机械硬盘，容量大成本低。AI训练数据的冷存储和备份仍大量使用HDD(尤其30TB+大容量)。</td><td class="pl-leader">Seagate (STX ✅) / WDC ✅ 双寡头</td><td class="pl-challenger">东芝</td></tr>
+                  <tr><td class="pl-name">MRAM</td><td class="pl-desc">🔥前沿存储技术。磁性随机存取存储器，断电不丢数据且速度接近SRAM，用于航天/汽车/工业。</td><td class="pl-leader">Everspin (MRAM ✅) 唯一上市</td><td class="pl-challenger">极小众</td></tr>
+                </table></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ——— 列4：显示技术 ——— -->
+      <div class="chain-parallel-col">
+        <div class="chain-layer" style="margin-bottom:0">
+          <div class="chain-layer-title" style="background:linear-gradient(135deg,#880E4F,#AD1457)">
+            <span>🖥️</span> 显示技术
+            <span class="layer-tag">负责"看"</span>
+          </div>
+          <div class="chain-layer-body">
+            <div class="chain-category">
+              <div class="chain-cat-name"><span class="cat-dot" style="background:#880E4F"></span>显示技术</div>
+              <div class="chain-stocks" id="chain-显示技术"></div>
+              <div class="chain-detail" style="border-left-color:#880E4F">
+                <div class="chain-detail-title"><span class="detail-icon">🎯</span>在产业链中的角色</div>
+                <p>显示技术是AI产业链的<strong>"眼睛"</strong>，连接AI算力与人类用户的最后界面。随着AI从云端向终端延伸(AI PC、AI手机、AR/VR眼镜)，对显示芯片和微显示器的需求快速增长。AR眼镜被认为是下一个"iPhone时刻"——Apple Vision Pro、Meta Orion等产品需要极小尺寸、超高分辨率的微显示器(Micro OLED/LCoS)，Kopin在军用和商用微显示领域处于领先。AI视觉传感器是另一个前沿方向——Himax的WiseEye芯片可以在设备端直接做人脸/手势识别，功耗仅毫瓦级，无需上传云端处理，是边缘AI的典型应用。虽然显示技术在AI产业链中市值最小，但它是AI从"看不见的后台"走向"看得见的前台"的关键桥梁。</p>
+                <div class="chain-detail-title"><span class="detail-icon">📊</span>产品线、行业龙头与关注覆盖</div>
+                <div class="pl-table-wrap"><table class="pl-table">
+                  <tr><th>产品线</th><th>简介</th><th>全球龙头</th><th>其他主要玩家</th></tr>
+                  <tr><td class="pl-name">显示驱动IC</td><td class="pl-desc">控制液晶/OLED面板每个像素点亮度的芯片。手机/电视/车载屏幕都需要，出货量巨大。</td><td class="pl-leader">Novatek / Samsung LSI</td><td class="pl-challenger">Himax (HIMX ✅, 前三), Raydium</td></tr>
+                  <tr><td class="pl-name">军用头盔显示</td><td class="pl-desc">军用飞行员/士兵头盔上的微型显示模块。要求极端环境可靠性，Kopin在该领域绝对领先。</td><td class="pl-leader">Kopin (KOPN ✅) 绝对龙头</td><td class="pl-challenger">Collins Aerospace</td></tr>
+                  <tr><td class="pl-name">AR/VR微显示器</td><td class="pl-desc">🔥前沿方向。AR眼镜/VR头显需要极小尺寸、高分辨率的微显示器(Micro OLED/LCoS/Micro LED)。</td><td class="pl-leader">Sony / Kopin (KOPN ✅)</td><td class="pl-challenger">BOE, JBD (MicroLED)</td></tr>
+                  <tr><td class="pl-name">AI视觉传感器</td><td class="pl-desc">🔥边缘AI热点。超低功耗AI视觉芯片，在设备端直接做人脸/手势/物体识别，无需上传云端。</td><td class="pl-leader">Himax (HIMX ✅) WiseEye</td><td class="pl-challenger">Sony IMX, OmniVision</td></tr>
+                </table></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="chain-arrow">▼ 四大组件集成为完整AI算力平台</div>
+
+    <!-- ═══════════════ 下游：AI算力交付 ═══════════════ -->
+    <div class="chain-layer">
+      <div class="chain-layer-title" style="background:linear-gradient(135deg,#154360,#2C3E50)">
+        <span>🏗️</span> 下游：AI算力交付
+        <span class="layer-tag">系统集成</span>
+      </div>
+      <div class="chain-layer-body">
+        <div class="chain-category">
+          <div class="chain-cat-name"><span class="cat-dot" style="background:#154360"></span>AI服务器与数据中心</div>
+          <div class="chain-stocks" id="chain-AI服务器与数据中心"></div>
+          <div class="chain-detail" style="border-left-color:#154360">
+            <div class="chain-detail-title"><span class="detail-icon">🎯</span>在产业链中的角色</div>
+            <p>AI服务器与数据中心处于产业链<strong>下游</strong>，是将所有上中游组件(GPU、HBM、光模块、交换芯片等)整合为完整AI算力平台的集成商。一台搭载8块B200 GPU的AI服务器售价超过$30万，2026年全球AI服务器市场规模预计超过$2000亿。Dell是品牌服务器出货量第一，同时SMCI(超微)以快速迭代和定制化著称。白牌/ODM模式下，Google、Meta等大厂直接找代工厂(鸿海/广达/Celestica)定制服务器，跳过品牌商。散热是新的关键环节——单块B200功耗超1000W，传统风冷已无法满足，液冷成为必选项，Vertiv是液冷散热龙头。GPU云算力(NBIS/APLD/IREN)则是新兴商业模式，为无力自建数据中心的企业提供GPU租赁服务。</p>
+            <div class="chain-detail-title"><span class="detail-icon">📊</span>产品线、行业龙头与关注覆盖</div>
+            <div class="pl-table-wrap"><table class="pl-table">
+              <tr><th>产品线</th><th>简介</th><th>全球龙头</th><th>其他主要玩家</th></tr>
+              <tr><td class="pl-name">AI服务器(出货量)</td><td class="pl-desc">🔥当前最大增量市场。搭载多块GPU的高性能服务器，用于AI训练和推理。2026年市场规模超$200B。</td><td class="pl-leader">Dell (DELL ✅) #1</td><td class="pl-challenger">HPE, SMCI ✅, Lenovo</td></tr>
+              <tr><td class="pl-name">AI服务器(白牌/定制)</td><td class="pl-desc">云厂商(Google/Meta等)自行设计、由ODM代工的服务器。跳过品牌商，成本更低、迭代更快。</td><td class="pl-leader">鸿海Foxconn / 广达</td><td class="pl-challenger">SMCI ✅, CLS ✅, Wistron</td></tr>
+              <tr><td class="pl-name">数据中心散热/液冷</td><td class="pl-desc">🔥AI芯片功耗飙升(单卡1000W+)，传统风冷已不够。液冷成为必选项，市场从零起步快速增长。</td><td class="pl-leader">Vertiv (VRT ✅) 龙头</td><td class="pl-challenger">Schneider, Rittal, CoolIT</td></tr>
+              <tr><td class="pl-name">企业AI平台</td><td class="pl-desc">帮助企业部署和管理AI模型的软件平台。IBM watsonx、Azure AI等争夺企业AI转型预算。</td><td class="pl-leader">IBM ✅ watsonx</td><td class="pl-challenger">Azure AI, Vertex AI, SageMaker</td></tr>
+              <tr><td class="pl-name">量子计算</td><td class="pl-desc">🔥前沿技术。利用量子比特进行计算，有望在药物研发、材料模拟、密码学等领域实现指数级加速。</td><td class="pl-leader">IBM ✅ Quantum 全球领先</td><td class="pl-challenger">Google, IonQ, Rigetti</td></tr>
+              <tr><td class="pl-name">企业存储</td><td class="pl-desc">企业级存储阵列和解决方案。AI数据湖和模型仓库需要高性能、高可靠的存储基础设施。</td><td class="pl-leader">Dell (DELL ✅) #1</td><td class="pl-challenger">NetApp, Pure Storage</td></tr>
+              <tr><td class="pl-name">GPU云算力</td><td class="pl-desc">🔥新兴商业模式。提供GPU算力租赁服务(GPU-as-a-Service)，让中小企业也能用上AI训练资源。</td><td class="pl-leader">AWS/Azure/GCP</td><td class="pl-challenger">CoreWeave, NBIS ✅, APLD ✅</td></tr>
+            </table></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════ 底层支撑：能源 ═══════════════ -->
+    <div style="margin-top:12px">
+      <div class="chain-layer">
+        <div class="chain-layer-title" style="background:linear-gradient(135deg,#196F3D,#2E7D32)">
+          <span>⚡</span> 底层支撑：AI能源
+          <span class="layer-tag">贯穿全链</span>
+        </div>
+        <div class="chain-layer-body">
+          <div class="chain-category">
+            <div class="chain-cat-name"><span class="cat-dot" style="background:#196F3D"></span>AI能源</div>
+            <div class="chain-stocks" id="chain-AI能源"></div>
+            <div class="chain-detail" style="border-left-color:#196F3D">
+              <div class="chain-detail-title"><span class="detail-icon">🎯</span>在产业链中的角色</div>
+              <p>能源是AI产业链的<strong>"血液"</strong>，也是当前最大的物理瓶颈之一。一个训练GPT-5级别模型的超大型数据中心功耗可达500MW-1GW，相当于一座中型城市的用电量。全球AI算力爆发正引发前所未有的"电力危机"——IEA预测到2030年全球数据中心用电量将翻倍。传统电网扩容需要3-5年审批和建设，远远跟不上AI数据中心的建设速度。核电因稳定、零碳排成为科技巨头首选，微软/Google/Amazon已签署长期核电购买协议；Bloom Energy的燃料电池可以在数据中心现场发电，6-12个月部署，绕过电网审批；GE Vernova的燃气轮机订单积压创历史新高。稀土材料(MP Materials)则是风力发电和电动车永磁电机的关键原料，中国管制出口后西方急需建立独立供应链。</p>
+              <div class="chain-detail-title"><span class="detail-icon">📊</span>产品线、行业龙头与关注覆盖</div>
+              <div class="pl-table-wrap"><table class="pl-table">
+                <tr><th>产品线</th><th>简介</th><th>全球龙头</th><th>其他主要玩家</th></tr>
+                <tr><td class="pl-name">核电(数据中心供电)</td><td class="pl-desc">🔥AI数据中心电力需求暴增，核电因稳定、零碳排成为科技巨头首选。微软/Google/Amazon已签署核电购买协议。</td><td class="pl-leader">Constellation Energy (CEG)</td><td class="pl-challenger">NextEra, Vistra (VST ✅)</td></tr>
+                <tr><td class="pl-name">天然气发电</td><td class="pl-desc">数据中心最快可得的大规模电力来源。建设周期比核电短，是过渡期的主力电源。</td><td class="pl-leader">Vistra (VST ✅)</td><td class="pl-challenger">NRG Energy, AES</td></tr>
+                <tr><td class="pl-name">燃料电池</td><td class="pl-desc">🔥就地发电方案。在数据中心现场用天然气/氢气发电，绕过电网审批(3-5年)，6-12个月可部署。</td><td class="pl-leader">Bloom Energy (BE ✅) 龙头</td><td class="pl-challenger">FuelCell Energy, Plug Power</td></tr>
+                <tr><td class="pl-name">核燃料浓缩</td><td class="pl-desc">为核电站提供浓缩铀燃料。全球核电复兴+SMR小型堆兴起，核燃料需求预期大增。</td><td class="pl-leader">Centrus (LEU ✅) 美国唯一</td><td class="pl-challenger">Urenco, TENEX, Orano</td></tr>
+                <tr><td class="pl-name">燃气轮机</td><td class="pl-desc">大型燃气发电的核心设备。AI电力需求推动燃气轮机订单激增，GE Vernova积压订单创新高。</td><td class="pl-leader">GE Vernova (GEV ✅) / Siemens</td><td class="pl-challenger">Mitsubishi Power</td></tr>
+                <tr><td class="pl-name">电网设备/HVDC</td><td class="pl-desc">高压直流输电和变电站设备。数据中心集群需要大容量电力接入，电网升级投资加速。</td><td class="pl-leader">GE Vernova (GEV ✅) / Siemens</td><td class="pl-challenger">ABB, Hitachi Energy</td></tr>
+                <tr><td class="pl-name">数据中心配电/UPS</td><td class="pl-desc">🔥AI数据中心电力密度飙升，PDU/UPS/开关设备需求激增。Eaton是数据中心电力管理全球龙头。</td><td class="pl-leader">Eaton (ETN ✅) 龙头</td><td class="pl-challenger">Schneider Electric, ABB</td></tr>
+                <tr><td class="pl-name">稀土(西方)</td><td class="pl-desc">永磁电机、风力发电、电动车的关键材料。🔥中国管制稀土出口，西方急需建立独立供应链。</td><td class="pl-leader">MP ✅ Materials (MP ✅) 美国唯一</td><td class="pl-challenger">Lynas (澳洲#1)</td></tr>
+              </table></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- CHANGELOG PANEL -->
+<div class="panel" id="panel-changelog">
+  <div class="chain-wrap">
+    <div class="chain-intro">
+      <h2>每日更新日志</h2>
+      <p>记录每次数据更新的详细内容，包括股价变动、新闻更新等。</p>
+    </div>
+    <div id="changelogContent"></div>
+  </div>
+</div>
+
+<!-- COMPANY PROFILE PANEL -->
+<div class="panel" id="panel-company">
+  <div class="company-controls">
+    <label>类别</label>
+    <select id="compCatFilter" onchange="renderCompany()"><option value="">全部</option></select>
+    <input type="text" id="compSearch" placeholder="搜索公司..." oninput="renderCompany()">
+  </div>
+  <div class="company-grid" id="companyGrid"></div>
+</div>
+
+<script>
+// ============ DATA ============
+const stocks = [
+  // AI芯片与核心硬件
+  {cat:"AI网络芯片",catColor:"#1565C0",ticker:"AVGO",name:"Broadcom",desc:"网络交换/定制ASIC",price:"411.35",change:"+18.45",changePct:"+4.70%",pe:"77.76",eps:"5.29",target:"482.31",mktCap:"$1.80T"},
+  {cat:"AI计算芯片",catColor:"#D32F2F",ticker:"NVDA",name:"NVIDIA",desc:"AI训练/推理GPU龙头",price:"210.69",change:"+6.04",changePct:"+2.95%",pe:"32.12",eps:"6.56",target:"296.81",mktCap:"$5.32T"},
+  {cat:"AI计算芯片",catColor:"#D32F2F",ticker:"AMD",name:"AMD",desc:"AI GPU/服务器CPU",price:"537.37",change:"+24.89",changePct:"+4.86%",pe:"174.47",eps:"3.08",target:"575.00",mktCap:"$833.6B"},
+  {cat:"AI计算芯片",catColor:"#D32F2F",ticker:"INTC",name:"Intel",desc:"AI加速器/代工",price:"133.99",change:"+12.89",changePct:"+10.64%",pe:"--",eps:"-0.73",target:"92.17",mktCap:"$566.4B"},
+  {cat:"AI网络芯片",catColor:"#1565C0",ticker:"MRVL",name:"Marvell",desc:"定制AI芯片/网络",price:"310.58",change:"+21.04",changePct:"+7.27%",pe:"61.02",eps:"5.09",target:"219.80",mktCap:"$258.5B"},
+  {cat:"存储与内存",catColor:"#4A148C",ticker:"MU",name:"Micron",desc:"HBM内存",price:"1,133.99",change:"+90.80",changePct:"+8.70%",pe:"53.57",eps:"21.17",target:"939.00",mktCap:"$1.14T"},
+
+  // AI基础设施与服务器
+  {cat:"AI服务器与数据中心",catColor:"#154360",ticker:"SMCI",name:"Super Micro",desc:"AI服务器",price:"30.66",change:"+2.88",changePct:"+10.37%",pe:"16.05",eps:"1.91",target:"50.94",mktCap:"$11.0B"},
+  {cat:"AI服务器与数据中心",catColor:"#154360",ticker:"VRT",name:"Vertiv",desc:"数据中心散热",price:"333.05",change:"+15.47",changePct:"+4.87%",pe:"81.83",eps:"4.07",target:"488.20",mktCap:"$121.9B"},
+
+  // 云计算与AI平台
+
+  // 网络安全AI
+
+  // 半导体设备与EDA
+  {cat:"半导体设备与制造",catColor:"#784212",ticker:"KLAC",name:"KLA Corp",desc:"检测设备",price:"259.56",change:"+20.83",changePct:"+8.73%",pe:"70.72",eps:"3.67",target:"185.51",mktCap:"$306.6B"},
+  {cat:"半导体设备与制造",catColor:"#784212",ticker:"PLAB",name:"Photronics",desc:"光掩膜",price:"33.63",change:"+2.62",changePct:"+8.45%",pe:"14.37",eps:"2.34",target:"51.50",mktCap:"$2.1B"},
+
+  // 半导体材料与零部件
+  {cat:"光通信",catColor:"#00695C",ticker:"COHR",name:"Coherent",desc:"光通信器件",price:"389.57",change:"+10.72",changePct:"+2.83%",pe:"185.51",eps:"2.10",target:"380.62",mktCap:"$65.9B"},
+  {cat:"光通信",catColor:"#00695C",ticker:"LITE",name:"Lumentum",desc:"光模块",price:"850.00",change:"-19.98",changePct:"-2.30%",pe:"150.71",eps:"5.64",target:"1,104.68",mktCap:"$60.3B"},
+  {cat:"光通信",catColor:"#00695C",ticker:"CIEN",name:"Ciena",desc:"光网络",price:"428.22",change:"-8.50",changePct:"-1.95%",pe:"272.75",eps:"1.57",target:"459.48",mktCap:"$56.5B"},
+  {cat:"光通信",catColor:"#00695C",ticker:"GLW",name:"Corning",desc:"光纤/玻璃",price:"194.92",change:"+19.52",changePct:"+11.13%",pe:"93.71",eps:"2.08",target:"197.67",mktCap:"$151.4B"},
+  {cat:"半导体设备与制造",catColor:"#784212",ticker:"SANM",name:"Sanmina",desc:"电子制造",price:"241.49",change:"-1.28",changePct:"-0.53%",pe:"56.56",eps:"4.27",target:"190.00",mktCap:"$11.9B"},
+  {cat:"半导体设备与制造",catColor:"#784212",ticker:"TTMI",name:"TTM Technologies",desc:"PCB制造",price:"216.44",change:"+13.74",changePct:"+6.78%",pe:"117.63",eps:"1.84",target:"209.00",mktCap:"$20.4B"},
+
+  // AI能源与电力
+  {cat:"AI能源",catColor:"#196F3D",ticker:"VST",name:"Vistra",desc:"发电/储能",price:"163.75",change:"+4.92",changePct:"+3.10%",pe:"27.38",eps:"5.98",target:"233.33",mktCap:"$57.6B"},
+  {cat:"AI能源",catColor:"#196F3D",ticker:"BE",name:"Bloom Energy",desc:"燃料电池",price:"328.91",change:"+43.92",changePct:"+15.41%",pe:"--",eps:"-0.03",target:"263.13",mktCap:"$92.8B"},
+  {cat:"AI服务器与数据中心",catColor:"#154360",ticker:"APLD",name:"Applied Digital",desc:"AI数据中心",price:"46.59",change:"+1.02",changePct:"+2.24%",pe:"--",eps:"-0.38",target:"64.59",mktCap:"$14.0B"},
+  {cat:"AI服务器与数据中心",catColor:"#154360",ticker:"IREN",name:"Iris Energy",desc:"可再生挖矿",price:"59.96",change:"+1.85",changePct:"+3.18%",pe:"77.87",eps:"0.77",target:"79.84",mktCap:"$20.7B"},
+
+  // 加密与Web3基础设施
+
+
+  // 新增：AI能源与资源
+  {cat:"AI能源",catColor:"#196F3D",ticker:"LEU",name:"Centrus Energy",desc:"核燃料浓缩",price:"191.39",change:"+21.08",changePct:"+12.38%",pe:"63.58",eps:"3.01",target:"278.64",mktCap:"$3.9B"},
+  {cat:"AI能源",catColor:"#196F3D",ticker:"GEV",name:"GE Vernova",desc:"能源设备/电网",price:"1,109.73",change:"+60.87",changePct:"+5.80%",pe:"32.47",eps:"34.18",target:"1,215.86",mktCap:"$301.0B"},
+  {cat:"AI能源",catColor:"#196F3D",ticker:"ETN",name:"Eaton Corp",desc:"电力管理/配电",price:"407.71",change:"+0.65",changePct:"+0.16%",pe:"37.41",eps:"10.48",target:"451.73",mktCap:"$145.7B"},
+  {cat:"AI能源",catColor:"#196F3D",ticker:"MP",name:"MP Materials",desc:"稀土材料",price:"60.88",change:"+0.04",changePct:"+0.07%",pe:"--",eps:"-0.40",target:"80.40",mktCap:"$10.1B"},
+
+  // 新增：AI芯片（补充）
+  {cat:"AI网络芯片",catColor:"#1565C0",ticker:"CRDO",name:"Credo Tech",desc:"高速互连芯片",price:"271.83",change:"+22.50",changePct:"+9.02%",pe:"149.36",eps:"1.82",target:"215.86",mktCap:"$55.2B"},
+  {cat:"AI网络芯片",catColor:"#1565C0",ticker:"ALAB",name:"Astera Labs",desc:"PCIe/CXL连接器",price:"417.07",change:"+42.39",changePct:"+11.31%",pe:"200.51",eps:"2.08",target:"243.00",mktCap:"$60.0B"},
+  {cat:"AI计算芯片",catColor:"#D32F2F",ticker:"GSIT",name:"GSI Technology",desc:"存内计算推理芯片",price:"7.58",change:"+0.26",changePct:"+3.55%",pe:"--",eps:"-0.42",target:"",mktCap:"$281M"},
+
+  // 新增：存储与显示
+  {cat:"存储与内存",catColor:"#4A148C",ticker:"RMBS",name:"Rambus",desc:"内存接口芯片",price:"141.17",change:"+11.07",changePct:"+8.51%",pe:"66.28",eps:"2.13",target:"145.25",mktCap:"$13.5B"},
+  {cat:"存储与内存",catColor:"#4A148C",ticker:"SIMO",name:"Silicon Motion",desc:"NAND控制器",price:"321.66",change:"+14.54",changePct:"+4.73%",pe:"63.82",eps:"5.04",target:"312.00",mktCap:"$9.7B"},
+  {cat:"存储与内存",catColor:"#4A148C",ticker:"MRAM",name:"Everspin",desc:"MRAM存储",price:"27.11",change:"+1.43",changePct:"+5.57%",pe:"2,711.00",eps:"0.01",target:"18.00",mktCap:"$588M"},
+  {cat:"存储与内存",catColor:"#4A148C",ticker:"DRAM",name:"DRAM ETF",desc:"DRAM存储ETF",price:"76.71",change:"+6.76",changePct:"+9.66%",pe:"60.88",eps:"1.26",target:"",mktCap:"--"},
+  {cat:"存储与内存",catColor:"#4A148C",ticker:"SNDK",name:"SanDisk",desc:"闪存",price:"2,184.75",change:"+225.95",changePct:"+11.54%",pe:"74.51",eps:"29.32",target:"1,751.32",mktCap:"$299.5B"},
+  {cat:"存储与内存",catColor:"#4A148C",ticker:"WDC",name:"Western Digital",desc:"硬盘/闪存",price:"746.23",change:"+34.10",changePct:"+4.79%",pe:"44.58",eps:"16.74",target:"650.00",mktCap:"$230.0B"},
+  {cat:"存储与内存",catColor:"#4A148C",ticker:"STX",name:"Seagate",desc:"硬盘",price:"1,070.23",change:"+4.16",changePct:"+0.39%",pe:"97.38",eps:"10.99",target:"771.00",mktCap:"$212.9B"},
+  {cat:"显示技术",catColor:"#880E4F",ticker:"HIMX",name:"Himax Technologies",desc:"显示驱动IC",price:"18.11",change:"+1.16",changePct:"+6.84%",pe:"95.32",eps:"0.19",target:"23.70",mktCap:"$2.6B"},
+  {cat:"显示技术",catColor:"#880E4F",ticker:"KOPN",name:"Kopin Corp",desc:"微显示器",price:"4.93",change:"+0.07",changePct:"+1.44%",pe:"493.00",eps:"0.01",target:"7.63",mktCap:"$771M"},
+
+  // 新增：半导体制造
+  {cat:"半导体设备与制造",catColor:"#784212",ticker:"AMKR",name:"Amkor Tech",desc:"封装测试",price:"90.46",change:"+4.03",changePct:"+4.66%",pe:"42.87",eps:"2.11",target:"75.50",mktCap:"$17.3B"},
+  {cat:"半导体设备与制造",catColor:"#784212",ticker:"AXTI",name:"AXT Inc",desc:"化合物半导体衬底",price:"84.57",change:"-7.54",changePct:"-8.19%",pe:"--",eps:"-0.32",target:"87.75",mktCap:"$5.4B"},
+  {cat:"半导体设备与制造",catColor:"#784212",ticker:"ALMU",name:"Aeluma",desc:"光电半导体",price:"24.19",change:"-0.67",changePct:"-2.70%",pe:"--",eps:"-0.35",target:"28.67",mktCap:"$356M"},
+  {cat:"半导体设备与制造",catColor:"#784212",ticker:"NVTS",name:"Navitas Semi",desc:"GaN功率芯片",price:"24.02",change:"+1.68",changePct:"+7.52%",pe:"--",eps:"-0.19",target:"12.88",mktCap:"$5.1B"},
+  {cat:"半导体设备与制造",catColor:"#784212",ticker:"SMTC",name:"Semtech",desc:"模拟/混合信号",price:"158.23",change:"+8.03",changePct:"+5.35%",pe:"--",eps:"-0.41",target:"225.00",mktCap:"$13.8B"},
+
+  // 新增：光通信与网络
+  {cat:"光通信",catColor:"#00695C",ticker:"AAOI",name:"Applied Optoelectronics",desc:"光收发器",price:"161.85",change:"-5.49",changePct:"-3.28%",pe:"--",eps:"-0.65",target:"151.30",mktCap:"$11.1B"},
+  {cat:"光通信",catColor:"#00695C",ticker:"POET",name:"POET Technologies",desc:"光子集成",price:"12.15",change:"+0.20",changePct:"+1.67%",pe:"--",eps:"-0.84",target:"8.20",mktCap:"$1.6B"},
+  {cat:"光通信",catColor:"#00695C",ticker:"LWLG",name:"Lightwave Logic",desc:"电光聚合物",price:"9.78",change:"+0.50",changePct:"+5.39%",pe:"--",eps:"-0.16",target:"",mktCap:"$1.4B"},
+
+  // 新增：AI基础设施（补充）
+  {cat:"AI服务器与数据中心",catColor:"#154360",ticker:"CLS",name:"Celestica",desc:"电子制造服务",price:"372.55",change:"-7.82",changePct:"-2.06%",pe:"45.16",eps:"8.25",target:"441.33",mktCap:"$34.4B"},
+  {cat:"AI服务器与数据中心",catColor:"#154360",ticker:"NBIS",name:"Nebius Group",desc:"AI基础设施",price:"286.69",change:"+5.78",changePct:"+2.06%",pe:"110.69",eps:"2.59",target:"278.70",mktCap:"$67.1B"},
+  {cat:"AI服务器与数据中心",catColor:"#154360",ticker:"IBM",name:"IBM",desc:"AI平台/量子计算",price:"249.10",change:"-13.25",changePct:"-5.05%",pe:"20.06",eps:"12.42",target:"340.00",mktCap:"$228.2B"},
+  {cat:"AI服务器与数据中心",catColor:"#154360",ticker:"DELL",name:"Dell Technologies",desc:"AI服务器/PC",price:"409.50",change:"-9.82",changePct:"-2.34%",pe:"46.59",eps:"8.79",target:"421.00",mktCap:"$265.9B"},
+
+  // 新增：云计算与AI平台（补充）
+
+  // 新增：AI应用与自动驾驶
+
+];
+
+// Calculate upside & rating for each
+stocks.forEach(s => {
+  const p = parseFloat((s.price||'').replace(/,/g,''));
+  const t = parseFloat((s.target||'').replace(/,/g,''));
+  if (p && t && p > 0) {
+    const upside = (t - p) / p * 100;
+    s.upside = upside.toFixed(1);
+    if (upside > 20) s.rating = "Strong Buy";
+    else if (upside > 5) s.rating = "Buy";
+    else if (upside > -5) s.rating = "Hold";
+    else if (upside > -15) s.rating = "Sell";
+    else s.rating = "Strong Sell";
+  } else {
+    s.upside = "";
+    s.rating = "";
+  }
+});
+
+const macroNews = [
+  {time:"2026-05-16 14:30",title:"美联储维持利率不变，暗示年内仍有降息空间",summary:"5月FOMC会议维持利率在4.25-4.50%区间，鲍威尔称通胀压力有所缓解",source:"Reuters",sector:"全市场",impact:"利好",tickers:"SPY, QQQ"},
+  {time:"2026-05-16 09:15",title:"英伟达发布Blackwell Ultra路线图，下半年量产",summary:"NVDA GTC补充会议披露B300 Ultra芯片将于Q3量产",source:"Bloomberg",sector:"AI芯片",impact:"强利好",tickers:"NVDA, AVGO, TSM"},
+  {time:"2026-05-15 16:45",title:"中美AI芯片出口管制再度收紧",summary:"美商务部拟进一步限制对华AI芯片出口",source:"WSJ",sector:"半导体",impact:"利空",tickers:"NVDA, AMD, INTC"},
+  {time:"2026-05-15 11:20",title:"微软Azure AI收入同比增长超80%",summary:"Q3财报显示AI云服务需求持续爆发",source:"CNBC",sector:"云计算",impact:"利好",tickers:"MSFT, GOOGL, AMZN"},
+  {time:"2026-05-15 08:30",title:"数据中心电力需求推动核能股大涨",summary:"多家科技巨头签署核电采购协议",source:"FT",sector:"AI能源",impact:"强利好",tickers:"CEG, VST, NRG"},
+  {time:"2026-05-14 17:00",title:"ARM股价暴涨14%创新高，AI IP授权收入翻倍",summary:"ARM财报超预期，AI相关IP授权收入大增",source:"Reuters",sector:"半导体",impact:"强利好",tickers:"ARM, QCOM, MRVL"},
+  {time:"2026-05-14 15:30",title:"比特币回调至10.3万美元，矿工股承压",summary:"BTC从10.7万高点回落，矿业股下跌3-8%",source:"CoinDesk",sector:"加密",impact:"利空",tickers:"MARA, RIOT, CLSK"},
+  {time:"2026-05-14 10:00",title:"网络安全AI需求激增，CrowdStrike上调全年指引",summary:"企业AI安全支出加速，多家安全公司上调预期",source:"TechCrunch",sector:"网络安全",impact:"利好",tickers:"CRWD, PANW, ZS"},
+];
+
+const stockNews = [
+  {time:"2026-06-18 16:00",ticker:"MU",name:"Micron",title:"多家投行大幅上调目标价(花旗$1200、TD Cowen $1500、RBC $1200)，内存价格Q3预计环比涨30-40%，6/24 Q3财报临近，涨8.7%",source:"Yahoo Finance",impact:"强利好",cat:"存储与内存",url:"https://finance.yahoo.com/quote/MU/news/"},
+  {time:"2026-06-18 15:56",ticker:"SNDK",name:"SanDisk",title:"摩根士丹利看多多年期存储上行周期，与BofA上调目标价至$1750-$2100，HBF高带宽闪存新品研发推进，创历史新高大涨11.5%",source:"Yahoo Finance",impact:"强利好",cat:"存储与内存",url:"https://finance.yahoo.com/quote/SNDK/news/"},
+  {time:"2026-06-18 15:52",ticker:"BE",name:"Bloom Energy",title:"AI数据中心电力需求叙事强化，$50亿Brookfield AI合作叠加Daiwa/UBS上调目标价至高$260-低$320区间，FY26营收指引$34-38亿，居关注列表涨幅榜首大涨15.4%",source:"Yahoo Finance",impact:"强利好",cat:"AI能源",url:"https://finance.yahoo.com/quote/BE/news/"},
+  {time:"2026-06-18 15:48",ticker:"LEU",name:"Centrus Energy",title:"核燃料供应链与能源安全政策关注升温，$39亿订单积压至2040年、Piketon铀浓缩扩产，大涨12.4%",source:"Yahoo Finance",impact:"强利好",cat:"AI能源",url:"https://finance.yahoo.com/quote/LEU/news/"},
+  {time:"2026-06-18 15:44",ticker:"ALAB",name:"Astera Labs",title:"6/22正式纳入Nasdaq-100指数在即，被动资金配置预期叠加AI基础设施需求强劲(Q1营收创纪录$3.08亿)，创历史新高大涨11.3%",source:"Yahoo Finance",impact:"强利好",cat:"AI网络芯片",url:"https://finance.yahoo.com/quote/ALAB/news/"},
+  {time:"2026-06-18 15:40",ticker:"GLW",name:"Corning",title:"亚马逊宣布数十亿美元多年期光纤供应协议供其美国数据中心，继Meta、英伟达后再添AI基建大单，大涨11.1%",source:"Yahoo Finance",impact:"强利好",cat:"光通信",url:"https://finance.yahoo.com/quote/GLW/news/"},
+  {time:"2026-06-18 15:36",ticker:"INTC",name:"Intel",title:"谷歌、英伟达据报选定Intel为先进制程备用代工厂(TSMC产能紧张)，18A-P节点按期进入风险量产，BofA维持买入目标价$135，大涨10.6%",source:"Yahoo Finance",impact:"强利好",cat:"AI计算芯片",url:"https://finance.yahoo.com/quote/INTC/news/"},
+  {time:"2026-06-18 15:32",ticker:"CRDO",name:"Credo Tech",title:"AI数据中心高速互连(AEC有源以太网电缆)需求强劲，板块情绪修复带动，涨9.0%",source:"Yahoo Finance",impact:"利好",cat:"AI网络芯片",url:"https://finance.yahoo.com/quote/CRDO/news/"},
+  {time:"2026-06-18 15:28",ticker:"KLAC",name:"KLA Corp",title:"10:1拆股后延续强势，先进封装与工艺控制设备需求旺盛，JPMorgan看好2030年盈利增至三倍，涨8.7%",source:"Yahoo Finance",impact:"利好",cat:"半导体设备与制造",url:"https://finance.yahoo.com/quote/KLAC/news/"},
+  {time:"2026-06-18 15:24",ticker:"RMBS",name:"Rambus",title:"内存超级周期叙事外溢，DDR5接口芯片需求强劲(市占率超90%)，涨8.5%",source:"Yahoo Finance",impact:"利好",cat:"存储与内存",url:"https://finance.yahoo.com/quote/RMBS/news/"},
+  {time:"2026-06-18 15:20",ticker:"PLAB",name:"Photronics",title:"半导体板块全线反弹，光掩膜寡头需求受益于AI芯片产能扩张，涨8.4%",source:"Yahoo Finance",impact:"利好",cat:"半导体设备与制造",url:"https://finance.yahoo.com/quote/PLAB/news/"},
+  {time:"2026-06-18 15:16",ticker:"NVTS",name:"Navitas Semi",title:"GaN功率芯片受AI数据中心800V供电叙事提振，自前期回调中反弹，涨7.5%",source:"Yahoo Finance",impact:"利好",cat:"半导体设备与制造",url:"https://finance.yahoo.com/quote/NVTS/news/"},
+  {time:"2026-06-18 15:12",ticker:"MRVL",name:"Marvell",title:"定制AI芯片需求叙事回暖，6/22正式纳入S&P 500在即带来被动配置资金，涨7.3%",source:"Yahoo Finance",impact:"利好",cat:"AI网络芯片",url:"https://finance.yahoo.com/quote/MRVL/news/"},
+  {time:"2026-06-18 15:08",ticker:"WDC",name:"Western Digital",title:"AI-HDD超级周期延续、毛利率突破50%，大行上调目标价至中$600区间，再创历史新高涨4.8%",source:"Yahoo Finance",impact:"利好",cat:"存储与内存",url:"https://finance.yahoo.com/quote/WDC/news/"},
+  {time:"2026-06-18 15:04",ticker:"AVGO",name:"Broadcom",title:"半导体板块全线反弹，定制ASIC与AI网络需求支撑，涨4.7%",source:"Yahoo Finance",impact:"利好",cat:"AI网络芯片",url:"https://finance.yahoo.com/quote/AVGO/news/"},
+  {time:"2026-06-18 15:00",ticker:"AMD",name:"AMD",title:"AI GPU需求叙事强劲，板块普涨带动，涨4.9%",source:"Yahoo Finance",impact:"利好",cat:"AI计算芯片",url:"https://finance.yahoo.com/quote/AMD/news/"},
+  {time:"2026-06-18 14:56",ticker:"AXTI",name:"AXT Inc",title:"拟将授权普通股本提高(7000万→1.2亿股)引发稀释担忧，叠加中国出口许可时点不确定，自历史高位继续回落，领跌关注列表跌8.2%",source:"Yahoo Finance",impact:"利空",cat:"半导体设备与制造",url:"https://finance.yahoo.com/quote/AXTI/news/"},
+  {time:"2026-06-18 14:52",ticker:"IBM",name:"IBM",title:"Accenture下调全年营收指引引发IT服务板块抛售，叠加企业AI依赖度担忧与美联储鹰派点阵图，跌5.1%",source:"Yahoo Finance",impact:"利空",cat:"AI服务器与数据中心",url:"https://finance.yahoo.com/quote/IBM/news/"},
+  {time:"2026-06-18 14:48",ticker:"AAOI",name:"Applied Optoelectronics",title:"共封装光学(CPO)出货或延迟的报告叠加前期大涨获利回吐，跌3.3%",source:"Yahoo Finance",impact:"利空",cat:"光通信",url:"https://finance.yahoo.com/quote/AAOI/news/"},
+  {time:"2026-06-17 16:00",ticker:"SIMO",name:"Silicon Motion",title:"AI存储需求叙事升温，NAND供应趋紧叠加SM2524XT PCIe Gen5 DRAM-less控制器新品提振，逆势大涨8.7%；分析师中值目标价$230",source:"Yahoo Finance",impact:"强利好",cat:"存储与内存",url:"https://finance.yahoo.com/quote/SIMO/news/"},
+  {time:"2026-06-17 15:55",ticker:"GEV",name:"GE Vernova",title:"AI数据中心电力需求强劲，公司将2026营收指引上调至$445-455亿、调整后EBITDA利润率升至12-14%，电气化订单创纪录，涨6.8%",source:"Yahoo Finance",impact:"强利好",cat:"AI能源",url:"https://finance.yahoo.com/quote/GEV/news/"},
+  {time:"2026-06-17 15:50",ticker:"MP",name:"MP Materials",title:"G7承诺2030年前将稀土对集团外供应商依赖降至60%以下，叠加五角大楼支持$5亿Phoenix Tailings贷款，大涨6.6%；分析师评级强力买入、目标价$80",source:"Yahoo Finance",impact:"强利好",cat:"AI能源",url:"https://finance.yahoo.com/quote/MP/news/"},
+  {time:"2026-06-17 15:45",ticker:"VRT",name:"Vertiv",title:"AI数据中心散热与供电需求叙事升温，叠加并购消息推动深耕先进热管理，涨6.0%；Bernstein 6/9给予跑赢大盘、目标价$416",source:"Yahoo Finance",impact:"利好",cat:"AI服务器与数据中心",url:"https://finance.yahoo.com/quote/VRT/news/"},
+  {time:"2026-06-17 15:40",ticker:"NBIS",name:"Nebius",title:"完成对Eigen AI的收购、强化推理与模型优化能力，叠加6/22纳入Nasdaq-100在即，涨6.0%；BofA目标价$280维持买入",source:"Yahoo Finance",impact:"利好",cat:"AI服务器与数据中心",url:"https://finance.yahoo.com/quote/NBIS/news/"},
+  {time:"2026-06-17 15:35",ticker:"WDC",name:"Western Digital",title:"AI驱动HDD超级周期延续、毛利率突破50%，继续创历史新高涨4.6%",source:"Yahoo Finance",impact:"利好",cat:"存储与内存",url:"https://finance.yahoo.com/quote/WDC/news/"},
+  {time:"2026-06-17 15:30",ticker:"AVGO",name:"Broadcom",title:"半导体板块情绪修复，定制ASIC与AI网络需求支撑，反弹4.3%",source:"Yahoo Finance",impact:"利好",cat:"AI网络芯片",url:"https://finance.yahoo.com/quote/AVGO/news/"},
+  {time:"2026-06-17 15:25",ticker:"CRDO",name:"Credo Tech",title:"AI高速互连需求强劲，前期技术性回调后反弹4.2%",source:"Yahoo Finance",impact:"利好",cat:"AI网络芯片",url:"https://finance.yahoo.com/quote/CRDO/news/"},
+  {time:"2026-06-17 15:20",ticker:"DELL",name:"Dell Technologies",title:"AI服务器订单与出货预期向好，涨3.8%",source:"Yahoo Finance",impact:"利好",cat:"AI服务器与数据中心",url:"https://finance.yahoo.com/quote/DELL/news/"},
+  {time:"2026-06-17 15:15",ticker:"MU",name:"Micron",title:"AI存储超级周期叙事延续，6/24 Q3财报临近，涨2.2%",source:"Yahoo Finance",impact:"中性",cat:"存储与内存",url:"https://finance.yahoo.com/quote/MU/news/"},
+  {time:"2026-06-17 15:10",ticker:"SMTC",name:"Semtech",title:"前期大涨后估值担忧(约55倍前瞻PE)引发获利回吐，跌7.0%",source:"Yahoo Finance",impact:"利空",cat:"半导体设备",url:"https://finance.yahoo.com/quote/SMTC/news/"},
+  {time:"2026-06-17 15:05",ticker:"SMCI",name:"Super Micro",title:"约$70亿股权及股权挂钩融资稀释担忧持续发酵，周内累计跌约28%后再跌4.9%",source:"Yahoo Finance",impact:"利空",cat:"AI服务器与数据中心",url:"https://finance.yahoo.com/quote/SMCI/news/"},
+  {time:"2026-06-17 15:00",ticker:"IBM",name:"IBM",title:"前期反弹后获利回吐跌3.1%；分析师目标价约$297维持买入，量子代工与软件业务长线看好",source:"Yahoo Finance",impact:"中性",cat:"AI服务器与数据中心",url:"https://finance.yahoo.com/quote/IBM/news/"},
+  {time:"2026-06-17 14:55",ticker:"GSIT",name:"GSI Technology",title:"小盘股流动性偏弱叠加板块轮动，跌3.1%",source:"Yahoo Finance",impact:"中性",cat:"AI计算芯片",url:"https://finance.yahoo.com/quote/GSIT/news/"},
+  {time:"2026-06-17 14:50",ticker:"POET",name:"POET Technologies",title:"光通信板块波动延续，前期$4亿注册直接发行稀释继续消化，跌5.5%",source:"Yahoo Finance",impact:"利空",cat:"光通信",url:"https://finance.yahoo.com/quote/POET/news/"},
+  {time:"2026-06-15 16:00",ticker:"AXTI",name:"AXT Inc",title:"增发授权股本(7000万→1.2亿股)稀释担忧+获利回吐，自历史高位重挫16.0%(年内仍涨约368%)",source:"Yahoo Finance",impact:"利空",cat:"半导体设备"},
+  {time:"2026-06-15 15:55",ticker:"AAOI",name:"Applied Optoelectronics",title:"有报告称共封装光学(CPO)出货或延迟，叠加板块抛售引发获利了结，跌10.8%",source:"Yahoo Finance",impact:"利空",cat:"光通信"},
+  {time:"2026-06-15 15:50",ticker:"MRVL",name:"Marvell",title:"AI芯片需求转弱担忧+CFO离任，跌9.8%；6月22日纳入S&P 500在即",source:"Yahoo Finance",impact:"利空",cat:"AI网络芯片"},
+  {time:"2026-06-15 15:45",ticker:"POET",name:"POET Technologies",title:"光通信板块随半导体回调，跌9.2%",source:"Yahoo Finance",impact:"利空",cat:"光通信"},
+  {time:"2026-06-15 15:40",ticker:"LITE",name:"Lumentum",title:"光模块板块跟随半导体走弱，跌8.6%",source:"Yahoo Finance",impact:"利空",cat:"光通信"},
+  {time:"2026-06-15 15:35",ticker:"INTC",name:"Intel",title:"前期双级上调涨幅回吐，随半导体普跌8.5%",source:"Yahoo Finance",impact:"利空",cat:"AI计算芯片"},
+  {time:"2026-06-15 15:30",ticker:"AMD",name:"AMD",title:"虽收购AI内存公司MEXT+Citi上调买入，仍随板块回调7.3%",source:"Yahoo Finance",impact:"中性",cat:"AI计算芯片"},
+  {time:"2026-06-15 15:25",ticker:"COHR",name:"Coherent",title:"光通信板块获利回吐，跌7.5%",source:"Yahoo Finance",impact:"利空",cat:"光通信"},
+  {time:"2026-06-15 15:20",ticker:"KLAC",name:"KLA Corp",title:"半导体设备随大盘回调，跌7.4%",source:"Yahoo Finance",impact:"利空",cat:"半导体设备"},
+  {time:"2026-06-15 15:15",ticker:"MU",name:"Micron",title:"AI存储超级周期叙事仍在，但随板块回调6.2%；6月24日Q3财报临近",source:"Yahoo Finance",impact:"中性",cat:"存储与内存"},
+  {time:"2026-06-15 15:10",ticker:"AVGO",name:"Broadcom",title:"被指为本轮半导体抛售导火索(Q2财报后AI前景指引保守)，连续走弱跌4.4%",source:"Yahoo Finance",impact:"利空",cat:"AI网络芯片"},
+  {time:"2026-06-15 15:05",ticker:"NVDA",name:"NVIDIA",title:"AI需求可持续性担忧+CPI压力，龙头跟跌2.4%",source:"Yahoo Finance",impact:"中性",cat:"AI芯片"},
+  {time:"2026-06-15 14:50",ticker:"WDC",name:"Western Digital",title:"逆势新高：Morgan Stanley/JPMorgan上调AI-HDD目标价至中$600区间，涨4.2%创历史新高(年内涨超200%)",source:"Yahoo Finance",impact:"强利好",cat:"存储与内存"},
+  {time:"2026-06-15 14:40",ticker:"VST",name:"Vistra",title:"AI数据中心电力需求叙事支撑，逆势涨3.3%(分析师中值目标$232)",source:"Yahoo Finance",impact:"利好",cat:"AI能源"},
+  {time:"2026-06-15 14:30",ticker:"BE",name:"Bloom Energy",title:"AI数据中心供电需求(与Oracle合作)支撑，逆势涨2.3%",source:"Yahoo Finance",impact:"利好",cat:"AI能源"},
+  {time:"2026-06-15 14:20",ticker:"NBIS",name:"Nebius",title:"Nasdaq-100纳入(6/22生效)被动配置需求支撑，逆势涨1.9%",source:"Yahoo Finance",impact:"利好",cat:"云计算"},
+  {time:"2026-06-12 16:00",ticker:"POET",name:"POET Technologies",title:"签署Lumilens战略合作获$5000万首单(五年可超$5亿)，并完成$4亿注册直接发行，大涨11.4%",source:"Yahoo Finance",impact:"强利好",cat:"光通信"},
+  {time:"2026-06-12 15:55",ticker:"AXTI",name:"AXT Inc",title:"InP磷化铟短缺叙事+空头回补延续，$6.325亿融资支持扩产与6英寸InP研发，再涨10.0%创新高",source:"Yahoo Finance",impact:"强利好",cat:"半导体设备"},
+  {time:"2026-06-12 15:50",ticker:"AMKR",name:"Amkor",title:"先进封装需求+亚利桑那园区进展，大涨8.7%创52周新高，一年累计涨277%",source:"Yahoo Finance",impact:"利好",cat:"半导体设备"},
+  {time:"2026-06-12 15:45",ticker:"STX",name:"Seagate",title:"AI需求下2026年HDD产能全部售罄，大涨7.3%，52周累计涨近700%",source:"Yahoo Finance",impact:"强利好",cat:"存储与内存"},
+  {time:"2026-06-12 15:40",ticker:"WDC",name:"Western Digital",title:"毛利率首次突破50%，街内最高目标价$685，涨6.4%创52周新高",source:"Yahoo Finance",impact:"利好",cat:"存储与内存"},
+  {time:"2026-06-12 15:35",ticker:"INTC",name:"Intel",title:"BofA双级上调后买盘延续，再涨6.5%，两日累计涨约16%",source:"Yahoo Finance",impact:"利好",cat:"AI计算芯片"},
+  {time:"2026-06-12 15:30",ticker:"ALAB",name:"Astera Labs",title:"宣布6月22日纳入Nasdaq-100指数(与CRWV、NBIS、RKLB、TER同批)，盘中一度涨5%后收平",source:"Yahoo Finance",impact:"利好",cat:"AI网络芯片"},
+  {time:"2026-06-12 15:25",ticker:"NBIS",name:"Nebius",title:"获纳入Nasdaq-100指数(6月22日生效)，涨4.6%",source:"Yahoo Finance",impact:"利好",cat:"云计算"},
+  {time:"2026-06-12 15:20",ticker:"COHR",name:"Coherent",title:"光通信涨势延续，涨5.9%；数据中心与通信业务占营收75%、同比增41%",source:"Yahoo Finance",impact:"利好",cat:"光通信"},
+  {time:"2026-06-12 15:15",ticker:"CRDO",name:"Credo Tech",title:"6月11日创历史新高$268.18并突破布林带上轨后技术性回调5.3%",source:"Yahoo Finance",impact:"中性",cat:"AI网络芯片"},
+  {time:"2026-06-11 16:00",ticker:"SNDK",name:"SanDisk",title:"Morgan Stanley看多AI存储超级周期，多家投行目标价升至$2100-3250，大涨14.5%创历史新高",source:"Yahoo Finance",impact:"强利好",cat:"存储与内存"},
+  {time:"2026-06-11 15:55",ticker:"KLAC",name:"KLA Corp",title:"JPMorgan称其2030年盈利有望增至三倍，10:1拆股6月12日生效，大涨12.9%",source:"Yahoo Finance",impact:"利好",cat:"半导体设备"},
+  {time:"2026-06-11 15:50",ticker:"MU",name:"Micron",title:"美伊紧张缓和+AI存储超级周期，大涨11.7%市值首破$1.1万亿；Susquehanna目标价升至$1750，6月24日财报临近",source:"Yahoo Finance",impact:"强利好",cat:"存储与内存"},
+  {time:"2026-06-11 15:45",ticker:"MRVL",name:"Marvell",title:"6月22日正式纳入S&P 500指数，FY2027营收指引上调至$110亿，大涨11.1%",source:"Yahoo Finance",impact:"利好",cat:"AI网络芯片"},
+  {time:"2026-06-11 15:40",ticker:"CRDO",name:"Credo Tech",title:"FY2026营收$13亿同比增逾三倍、Q4营收$4.37亿创纪录，AI连接需求强劲，涨11.4%",source:"Yahoo Finance",impact:"利好",cat:"AI网络芯片"},
+  {time:"2026-06-11 15:35",ticker:"IREN",name:"Iris Energy",title:"宣布南澳800MW数据中心园区并完成$36.5亿投资级GPU融资，涨10.1%",source:"Yahoo Finance",impact:"利好",cat:"AI服务器与数据中心"},
+  {time:"2026-06-11 15:30",ticker:"INTC",name:"Intel",title:"BofA罕见双级上调评级至买入、目标价$96升至$135，看好服务器CPU与代工双引擎，大涨9.3%",source:"Yahoo Finance",impact:"强利好",cat:"AI计算芯片"},
+  {time:"2026-06-11 15:25",ticker:"SMCI",name:"Super Micro",title:"跌入历史支撑区($27.8-30.7)后反弹9.2%，该区间历史上六次触及平均最高反弹近58%",source:"Yahoo Finance",impact:"利好",cat:"基础设施"},
+  {time:"2026-06-11 15:20",ticker:"AMD",name:"AMD",title:"Oracle强劲AI资本开支前景+伊朗局势缓和，大涨8.0%；街内最高目标价$665",source:"Yahoo Finance",impact:"利好",cat:"AI计算芯片"},
+  {time:"2026-06-11 15:15",ticker:"VST",name:"Vistra",title:"作为首选电力供应商参与KKR发起的$100亿AI基建公司Helix，涨5.7%",source:"Yahoo Finance",impact:"利好",cat:"AI能源"},
+  {time:"2026-06-11 15:10",ticker:"NVDA",name:"NVIDIA",title:"携手KKR、科威特投资局、Vistra发起$100亿AI基建公司Helix，前AWS CEO Selipsky执掌，涨2.2%",source:"Yahoo Finance",impact:"利好",cat:"AI芯片"},
+];
+
+// ============ TABS ============
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelector('.tab[onclick*="'+tab+'"]').classList.add('active');
+  document.getElementById('panel-' + tab).classList.add('active');
+  if (tab === 'overview') renderOverview();
+  if (tab === 'company') renderCompany();
+  if (tab === 'chain') renderChain();
+  if (tab === 'changelog') renderChangelog();
+}
+
+// ============ STOCK TABLE ============
+let sortCol = null, sortDir = 1;
+const columns = [
+  {key:'idx',label:'#',w:30},
+  {key:'ticker',label:'代码',w:60},
+  {key:'name',label:'公司',w:100},
+  {key:'cat',label:'类别',w:100},
+  {key:'desc',label:'产业定位',w:100},
+  {key:'mktCap',label:'市值',w:70},
+  {key:'price',label:'最新价',w:70,numeric:true},
+  {key:'change',label:'涨跌',w:60,numeric:true},
+  {key:'changePct',label:'涨跌%',w:65,numeric:true},
+  {key:'target',label:'目标价',w:65,numeric:true},
+  {key:'upside',label:'空间%',w:65,numeric:true},
+  {key:'pe',label:'P/E',w:55,numeric:true},
+  {key:'eps',label:'EPS',w:55,numeric:true},
+  {key:'earningsDate',label:'财报日',w:75,isDate:true},
+];
+
+function initCatFilter() {
+  const cats = [...new Set(stocks.map(s => s.cat))];
+  const sel = document.getElementById('filterCat');
+  cats.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; sel.appendChild(o); });
+}
+
+function getFiltered() {
+  const cat = document.getElementById('filterCat').value;
+  const q = document.getElementById('searchBox').value.toLowerCase();
+  return stocks.filter(s => {
+    if (cat && s.cat !== cat) return false;
+    if (q && !s.ticker.toLowerCase().includes(q) && !s.name.toLowerCase().includes(q) && !s.desc.includes(q)) return false;
+    return true;
+  });
+}
+
+function sortData(data) {
+  if (!sortCol) return data;
+  const col = columns.find(c => c.key === sortCol);
+  return [...data].sort((a, b) => {
+    let va = a[sortCol] || '', vb = b[sortCol] || '';
+    if (col && col.isDate) {
+      va = va ? new Date(va).getTime() : (sortDir === 1 ? Infinity : -Infinity);
+      vb = vb ? new Date(vb).getTime() : (sortDir === 1 ? Infinity : -Infinity);
+    } else if (col && col.numeric) {
+      const pa = parseFloat(String(va).replace(/[,%+()$TBM]/g, ''));
+      const pb = parseFloat(String(vb).replace(/[,%+()$TBM]/g, ''));
+      va = isNaN(pa) ? (sortDir === 1 ? Infinity : -Infinity) : pa;
+      vb = isNaN(pb) ? (sortDir === 1 ? Infinity : -Infinity) : pb;
+    }
+    if (va < vb) return -1 * sortDir;
+    if (va > vb) return 1 * sortDir;
+    return 0;
+  });
+}
+
+function renderTable() {
+  const filtered = sortData(getFiltered());
+  document.getElementById('countBadge').textContent = filtered.length+' 只';
+  const thead = document.getElementById('stockHead');
+  thead.innerHTML = '<tr>' + columns.map(c =>
+    '<th class="'+(sortCol===c.key?'sorted':'')+'" onclick="doSort(\''+c.key+'\')" style="min-width:'+c.w+'px">'+c.label+'<span class="sort-arrow">'+(sortCol===c.key?(sortDir===1?'▲':'▼'):'⇅')+'</span></th>'
+  ).join('') + '</tr>';
+  const tbody = document.getElementById('stockBody');
+  tbody.innerHTML = filtered.map((s, i) => {
+    const chgClass = (s.change||'').startsWith('+') ? 'green' : (s.change||'').startsWith('-') ? 'red' : '';
+    const upsideClass = parseFloat(s.upside) > 0 ? 'green' : parseFloat(s.upside) < 0 ? 'red' : '';
+    const profile = companyProfiles[s.ticker];
+    const ed = profile && profile.earningsDate ? profile.earningsDate : '';
+    const edDisplay = ed ? ed.slice(5).replace('-','/') : '--';
+    const edDays = ed ? Math.ceil((new Date(ed) - new Date()) / 86400000) : 999;
+    const edClass = edDays <= 7 ? 'color:#cc0000;font-weight:700' : edDays <= 14 ? 'color:#e67e00;font-weight:600' : 'color:#666';
+    return '<tr><td>'+(i+1)+'</td><td class="ticker">'+s.ticker+'</td><td>'+s.name+'</td><td style="text-align:left"><span class="cat-tag" style="background:'+s.catColor+'22;color:'+s.catColor+';border-left:3px solid '+s.catColor+';padding:2px 8px 2px 6px;border-radius:0 4px 4px 0;font-size:11px;font-weight:600;white-space:nowrap">'+s.cat+'</span></td><td style="font-size:11px;color:#666">'+s.desc+'</td><td style="font-weight:600;color:#1565C0">'+(s.mktCap||'--')+'</td><td class="bold">'+s.price+'</td><td class="'+chgClass+'">'+s.change+'</td><td class="'+chgClass+' bold">'+s.changePct+'</td><td>'+s.target+'</td><td class="'+upsideClass+' bold">'+(s.upside ? s.upside+'%' : '')+'</td><td>'+s.pe+'</td><td>'+s.eps+'</td><td style="'+edClass+';font-size:11px">'+edDisplay+(edDays <= 7 ? ' ⚡' : '')+'</td></tr>';
+  }).join('');
+}
+
+function doSort(key) {
+  if (sortCol === key) sortDir *= -1;
+  else { sortCol = key; sortDir = 1; }
+  renderTable();
+}
+
+// ============ NEWS ============
+function renderNews() {
+  const impact = document.getElementById('filterImpact').value;
+  const q = document.getElementById('newsSearch').value.toLowerCase();
+  const filterFn = (n) => {
+    if (impact && n.impact !== impact) return false;
+    if (q && !n.title.toLowerCase().includes(q) && !(n.tickers||n.ticker||'').toLowerCase().includes(q)) return false;
+    return true;
+  };
+  const fMacro = macroNews.filter(filterFn);
+  const fStock = stockNews.filter(filterFn);
+  let html = '';
+  if (fMacro.length) {
+    html += '<div class="news-section-title macro">宏观市场要闻</div>';
+    fMacro.forEach(n => { html += '<div class="news-card"><div class="news-time">'+n.time+'</div><div class="news-body"><a class="news-title" href="https://news.google.com/search?q='+encodeURIComponent(n.title)+'&hl=en-US" target="_blank" style="display:block;text-decoration:none;color:#1a1a2e">'+n.title+'</a><div class="news-meta"><span class="source">'+n.source+'</span><span class="impact-tag impact-'+n.impact+'">'+n.impact+'</span><span>'+n.sector+'</span><span style="color:#1a5276;font-weight:600">'+n.tickers+'</span></div></div></div>'; });
+  }
+  if (fStock.length) {
+    html += '<div class="news-section-title stock" style="margin-top:12px">重点个股新闻</div>';
+    fStock.forEach(n => { html += '<div class="news-card"><div class="news-time">'+n.time+'</div><div class="news-body"><a class="news-title" href="https://news.google.com/search?q='+encodeURIComponent(n.ticker+' '+n.title)+'&hl=en-US" target="_blank" style="display:block;text-decoration:none;color:#1a1a2e">'+n.title+'</a><div class="news-meta"><span style="color:#1a5276;font-weight:700">'+n.ticker+'</span><span>'+n.name+'</span><span class="source">'+n.source+'</span><span class="impact-tag impact-'+n.impact+'">'+n.impact+'</span><span style="color:#666">'+n.cat+'</span></div></div></div>'; });
+  }
+  if (!html) html = '<div class="empty">没有匹配的新闻</div>';
+  document.getElementById('newsContainer').innerHTML = html;
+}
+
+// ============ OVERVIEW ============
+let chartsRendered = false;
+function renderOverview() {
+  if (chartsRendered) return;
+  chartsRendered = true;
+  const total = stocks.length;
+  const up = stocks.filter(s => (s.change||'').startsWith('+')).length;
+  const down = stocks.filter(s => (s.change||'').startsWith('-')).length;
+  document.getElementById('summaryCards').innerHTML = '<div class="summary-card"><div class="num">'+total+'</div><div class="label">总股票数</div></div><div class="summary-card"><div class="num green">'+up+'</div><div class="label">上涨</div></div><div class="summary-card"><div class="num red">'+down+'</div><div class="label">下跌</div></div>';
+  const catMap = {};
+  stocks.forEach(s => { catMap[s.cat] = (catMap[s.cat]||0) + 1; });
+  new Chart(document.getElementById('chartCat'), { type:'doughnut', data:{ labels:Object.keys(catMap), datasets:[{data:Object.values(catMap),backgroundColor:['#1B4F72','#154360','#0E6655','#6C3483','#784212','#1A5276','#196F3D','#B7950B']}] }, options:{plugins:{legend:{position:'right',labels:{font:{size:10}}}}} });
+  const ratingMap = {};
+  stocks.forEach(s => { if(s.rating) ratingMap[s.rating]=(ratingMap[s.rating]||0)+1; });
+  const ratingOrder = ['Strong Buy','Buy','Hold','Sell','Strong Sell'];
+  const ratingColors = ['#006400','#228b22','#ff8c00','#cc0000','#8b0000'];
+  new Chart(document.getElementById('chartRating'), { type:'bar', data:{ labels:ratingOrder.filter(r=>ratingMap[r]), datasets:[{data:ratingOrder.filter(r=>ratingMap[r]).map(r=>ratingMap[r]),backgroundColor:ratingColors.filter((_,i)=>ratingMap[ratingOrder[i]])}] }, options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{stepSize:5}}}} });
+  const bins = {'>5%':0,'2~5%':0,'0~2%':0,'-2~0%':0,'-5~-2%':0,'<-5%':0};
+  stocks.forEach(s => { const v=parseFloat(String(s.changePct).replace(/[%+]/g,'')); if(isNaN(v))return; if(v>5)bins['>5%']++; else if(v>2)bins['2~5%']++; else if(v>=0)bins['0~2%']++; else if(v>-2)bins['-2~0%']++; else if(v>-5)bins['-5~-2%']++; else bins['<-5%']++; });
+  new Chart(document.getElementById('chartChange'), { type:'bar', data:{ labels:Object.keys(bins), datasets:[{data:Object.values(bins),backgroundColor:['#006400','#27ae60','#7dcea0','#f1948a','#e74c3c','#8b0000']}] }, options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{stepSize:5}}}} });
+}
+
+// ============ COMPANY PROFILES ============
+const companyProfiles = {
+  "AVGO": {founded:"1961",hq:"加州圣何塞",employees:"~20,000",earningsDate:"2026-09-03",revenue:"FY2025 $56B+",marketCap:"$2.1T+",overview:"Broadcom是全球最大的半导体公司之一，也是AI基础设施中不可或缺的核心供应商。",products:["网络交换芯片 [行业龙头]","定制AI加速器ASIC [龙头]","光学DSP/PHY [龙头]"],advantages:["AI网络芯片市占率>70%，垄断地位","定制ASIC设计能力全球顶尖(Google TPU)","VMware软件年收入$18B+，高毛利率"],risks:["AI网络芯片面临Cisco/Marvell竞争","VMware整合中客户流失风险","前五大客户收入占比过高"],news:[{title:"半导体板块全线反弹，定制ASIC与AI网络需求支撑，涨4.7%",summary:"半导体板块全线反弹，定制ASIC与AI网络需求支撑，涨4.7%",date:"2026/6/18",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/AVGO/news/"},{title:"半导体板块情绪修复，定制ASIC与网络需求支撑，反弹4.3%",summary:"半导体板块情绪修复，定制ASIC与网络需求支撑，反弹4.3%",date:"2026/6/17",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/AVGO/news/"},{title:"被指为本轮半导体抛售导火索(Q2财报后AI前景指引保守)，跌4.4%",summary:"市场将本轮AI半导体抛售的导火索归于Broadcom——尽管Q2 AI半导体收入暴增，但CEO未上调2026年$100亿AI芯片销售目标，引发对AI资本开支可持续性的疑虑。6月15日AVGO延续走弱跌约4.4%。叠加CPI偏热的利率担忧与内存/智能手机需求疑虑，费城半导体指数大幅下挫。",date:"2026/06/15",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/AVGO/"},{title:"Q2营收$222亿同比增48%，AI半导体收入$108亿暴增143%，但CEO未上调$100亿AI目标，股价暴跌约12.6%",summary:"Broadcom Q2 FY26营收$222亿(+48%)，AI半导体收入$108亿同比增143%，非GAAP EPS $2.44超预期$2.40，运营利润率创纪录67%。Q3指引营收约$294亿(+84%)。但因CEO Hock Tan未上调2026年$100亿AI芯片销售目标，股价暴跌约12.6%，买预期卖事实。",date:"2026/06/03",pub:"Yahoo Finance",url:"https://www.cnbc.com/2026/06/03/broadcom-avgo-earnings-report-q2-2026.html"},{title:"6月3日发布Q2财报，预期营收$220亿同比增47%",summary:"AI相关收入同比翻倍至$84亿，AI交换芯片订单积压超$100亿。但毛利率承压和估值偏高使财报前风险加大。",date:"2026/06/01",pub:"Yahoo Finance",url:"https://finance.yahoo.com/markets/stocks/articles/avgo-set-report-q2-earnings-135300340.html"},{title:"Broadcom AI芯片收入翻倍，定制ASIC需求强劲",summary:"AI相关收入同比增长106%，定制ASIC（Google TPU等）和网络交换芯片驱动增长。",date:"2026/05/31",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/AVGO/"}]},
+  "NVDA": {founded:"1993",hq:"加州圣克拉拉",employees:"~36,000",earningsDate:"2026-08-20",revenue:"FY2026 $130B+",marketCap:"$5.5T+",overview:"NVIDIA是全球AI算力的绝对霸主。",products:["AI训练/推理GPU [绝对垄断，份额>80%]","CUDA软件生态 [垄断级护城河]"],advantages:["AI GPU市场垄断(>80%份额)","CUDA生态护城河极深"],risks:["估值已充分反映高增长预期","AMD/Intel/定制ASIC竞争加剧"],news:[{title:"AI需求可持续性担忧+CPI压力，龙头跟跌2.4%",summary:"6月15日NVIDIA随AI半导体板块回调约2.4%，市场担忧AI基建支出的可持续性，叠加CPI偏热引发的利率担忧。导火索为Broadcom保守的AI前景指引。NVIDIA基本面与生态护城河未变，此前已拿下苹果AI大客户、市值逼近$5万亿，38位分析师维持强力买入。",date:"2026/06/15",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/NVDA/"},{title:"携手KKR、科威特投资局、Vistra发起$100亿AI基建公司Helix，涨2.2%",summary:"KKR发起的Helix Digital Infrastructure获逾$100亿承诺资本，NVIDIA为锚定投资人并提供AI数据中心设计专长，Vistra任首选电力供应商，前AWS CEO Selipsky出任CEO。私募资本正成为AI基建的重要资金来源。",date:"2026/06/11",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/NVDA/"},{title:"拿下苹果AI大客户、市值逼近$5万亿；CPI日回调2.8%",summary:"6月9日NVIDIA确认拿下苹果作为重大AI客户，市值逼近$5万亿，Dan Loeb称仍被低估，38位分析师维持强力买入。6月10日因CPI偏热、芯片股普跌而回调2.8%。",date:"2026/06/10",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/NVDA/"}]},
+  "AMD": {founded:"1969",hq:"加州圣克拉拉",employees:"~26,000",earningsDate:"2026-08-04",revenue:"FY2025 $30B+",marketCap:"$330B+",overview:"AMD是NVIDIA在AI GPU市场最具威胁的挑战者。",products:["AI训练/推理GPU [行业#2]","数据中心CPU [龙头，份额>30%]"],advantages:["MI系列GPU性价比对标NVIDIA","EPYC服务器CPU份额超30%"],risks:["CUDA生态护城河极难攻破","ROCm软件成熟度仍落后"],news:[{title:"AI GPU需求叙事强劲，板块普涨带动，涨4.9%",summary:"AI GPU需求叙事强劲，板块普涨带动，涨4.9%",date:"2026/6/18",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/AMD/news/"},{title:"Oracle强劲AI资本开支前景+伊朗局势缓和，大涨8.0%",summary:"Oracle业绩显示AI需求强劲并计划扩张数据中心，投资者视其为AI芯片需求健康的证据；叠加特朗普取消对伊打击、地缘风险缓和，AMD大涨8.0%。分析师共识强力买入、无卖出评级，街内最高目标价$665。",date:"2026/06/11",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/AMD/"},{title:"5大巨头接近买点",summary:"AMD近期因MI350预售订单超预期受热捧。",date:"2026/5/31",pub:"IBD",url:"https://finance.yahoo.com/quote/AMD/news/"}]},
+  "INTC": {founded:"1968",hq:"加州圣克拉拉",employees:"~110,000",earningsDate:"2026-07-23",revenue:"FY2025 $53B",marketCap:"$110B+",overview:"Intel正在经历50多年历史上最激进的战略转型。",products:["数据中心CPU [曾经龙头]","AI加速器 Gaudi 3","晶圆代工 Intel 18A"],advantages:["美国唯一先进制程制造能力","CHIPS Act补贴$80B+"],risks:["18A制程量产执行风险极大","代工客户获取进展缓慢"],news:[{title:"谷歌、英伟达据报选定Intel为先进制程备用代工厂(TSMC产能紧张)，18A-P节点按期进入风险量产，BofA维持买入目标价$135，大涨10.6%",summary:"谷歌、英伟达据报选定Intel为先进制程备用代工厂(TSMC产能紧张)，18A-P节点按期进入风险量产，BofA维持买入目标价$135，大涨10.6%",date:"2026/6/18",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/INTC/news/"},{title:"BofA上调后买盘延续，再涨6.5%，两日累计约16%",summary:"BofA双级上调(目标价$135)后机构买盘持续涌入，市场聚焦服务器CPU份额回升与外部代工客户进展。BofA预计2030年服务器CPU市场超$1700亿、Intel份额可达25%、EPS超$6。",date:"2026/06/12",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/INTC/"},{title:"BofA罕见双级上调评级至买入、目标价升至$135，大涨9.3%",summary:"BofA分析师Vivek Arya将Intel从跑输大盘双级上调至买入，目标价$96升至$135，称对其服务器CPU与外部代工业务信心增强，预计2030年服务器CPU市场份额达25%、EPS超$6。BofA同时将全球服务器CPU市场预估从$1250亿上调至超$1700亿。",date:"2026/06/11",pub:"Yahoo Finance",url:"https://finance.yahoo.com/markets/stocks/articles/intel-rallies-bofa-double-upgrades-105400178.html"},{title:"Intel分析",summary:"Intel代工转型。",date:"2026/5/31",pub:"Insider Monkey",url:"https://finance.yahoo.com/quote/INTC/news/"}]},
+  "MRVL": {founded:"1995",hq:"特拉华州威尔明顿",employees:"~7,000",earningsDate:"2026-08-27",revenue:"FY2026E $10B+",marketCap:"$250B+",overview:"Marvell Technology是AI定制芯片领域仅次于Broadcom的第二大玩家。黄仁勋称其为'下一个万亿美元公司'。",products:["定制AI加速器ASIC [行业#2]","光学DSP [龙头]","Teralynx T100交换芯片 [新品]"],advantages:["定制AI芯片设计能力全球前二","光学DSP市占率领先","黄仁勋亲自背书"],risks:["定制芯片设计到量产周期长","客户高度集中"],news:[{title:"定制AI芯片需求叙事回暖，6/22正式纳入S&P 500在即带来被动配置资金，涨7.3%",summary:"定制AI芯片需求叙事回暖，6/22正式纳入S&P 500在即带来被动配置资金，涨7.3%",date:"2026/6/18",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/MRVL/news/"},{title:"AI芯片需求转弱担忧+CFO离任，跌9.8%；6/22纳入S&P 500在即",summary:"6月15日Marvell随板块走弱跌约9.8%，市场担忧AI芯片需求降温，叠加CFO Willem Meintjes于6月15日离任的不确定性。但结构性利好仍在：6月22日正式纳入S&P 500将带来被动资金配置需求，FY2027营收指引上调至$110亿。短期获利回吐与板块降温压制股价。",date:"2026/06/15",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/MRVL/"},{title:"6月22日正式纳入S&P 500，FY2027营收指引上调至$110亿，大涨11.1%",summary:"S&P道琼斯指数公司宣布Marvell与Flex于6月22日开盘前纳入S&P 500，取代Pool与Campbell's。公司将FY2027营收指引上调至$110亿，增量全部来自云资本开支与订单加速。年初至今涨约210%，市值约$2300亿。",date:"2026/06/11",pub:"Yahoo Finance",url:"https://finance.yahoo.com/markets/stocks/articles/marvell-stock-pops-p-500-221524366.html"},{title:"黄仁勋Computex称Marvell将成下一个万亿美元公司，发布Teralynx T100",summary:"NVIDIA CEO在Computex与Marvell CEO对话中盛赞Marvell。同日发布业界首款102.4Tbps AI优化交换芯片。Q1营收$24.2亿创新高，数据中心占比76%。",date:"2026/06/02",pub:"TipRanks",url:"https://www.tipranks.com/news/why-is-marvell-technology-mrvl-stock-soaring-today-june-2-2026"}]},
+  "MU": {founded:"1978",hq:"爱达荷州博伊西",employees:"~43,000",earningsDate:"2026-06-24",revenue:"FY2025 $35B+",marketCap:"$170B+",overview:"Micron Technology是全球三大内存芯片巨头之一。",products:["HBM高带宽内存 [行业#3]","DRAM [全球三巨头之一]"],advantages:["HBM产能全部售罄到2026年","美国唯一DRAM制造商"],risks:["内存行业强周期性","HBM竞争加剧"],news:[{title:"多家投行大幅上调目标价(花旗$1200、TD Cowen $1500、RBC $1200)，内存价格Q3预计环比涨30-40%，6/24 Q3财报临近，涨8.7%",summary:"多家投行大幅上调目标价(花旗$1200、TD Cowen $1500、RBC $1200)，内存价格Q3预计环比涨30-40%，6/24 Q3财报临近，涨8.7%",date:"2026/6/18",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/MU/news/"},{title:"AI存储超级周期延续，6/24 Q3财报临近，涨2.2%",summary:"AI存储超级周期延续，6/24 Q3财报临近，涨2.2%",date:"2026/6/17",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/MU/news/"},{title:"随板块回调6.2%，AI存储超级周期叙事仍在，6/24 Q3财报临近",summary:"6月15日Micron随AI半导体板块回调约6.2%。但中长期叙事未变：HBM4 36GB已为NVIDIA Vera Rubin平台批量出货，2026年HBM产能在多年期合约下全部售罄，DRAM均价环比大幅上涨。分析师共识强力买入(均值约$939)。6月24日发布Q3财报将为AI存储行情定调。",date:"2026/06/15",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/MU/"},{title:"美伊缓和+AI存储超级周期推动大涨11.7%，市值首破$1.1万亿",summary:"6月11日费城半导体指数大涨7.9%，Micron领涨大盘股。HBM4 36GB 12H已为NVIDIA Vera Rubin平台批量出货，2026年HBM产能多年期合约全部售罄。Susquehanna目标价$600升至$1750、UBS $1625、Raymond James $1100，分析师共识强力买入(均值约$939)。6月24日发布Q3财报。",date:"2026/06/11",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/MU/"},{title:"HBM 2026产能售罄、DRAM均价环比涨60%+，6月24日财报临近",summary:"Micron 2026年HBM产能在多年期合约下全部售罄，含领先的HBM4。Q2 DRAM营收环比增74%、均价涨约60%，NAND营收环比增82%，毛利率指引约68%。年初至今涨约68%，6月24日发布Q3财报。",date:"2026/06/08",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/MU/"}]},
+  "CRDO": {founded:"2008",hq:"加州圣何塞",employees:"~500",earningsDate:"2026-09-01",revenue:"FY2026E $1B+",marketCap:"$35B+",overview:"Credo Technology是AI数据中心高速连接领域增长最快的新星。",products:["有源以太网电缆AEC [新兴龙头]","SerDes IP [领先]"],advantages:["AEC技术性价比最优","收入增速>300%"],risks:["公司规模较小","估值极高"],news:[{title:"AI数据中心高速互连(AEC有源以太网电缆)需求强劲，板块情绪修复带动，涨9.0%",summary:"AI数据中心高速互连(AEC有源以太网电缆)需求强劲，板块情绪修复带动，涨9.0%",date:"2026/6/18",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/CRDO/news/"},{title:"AI高速互连需求强劲，回调后反弹4.2%",summary:"AI高速互连需求强劲，回调后反弹4.2%",date:"2026/6/17",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/CRDO/news/"},{title:"创历史新高后技术性回调5.3%",summary:"CRDO于6月11日盘中创历史新高$268.18并突破布林带上轨，6月12日获利回吐回调5.3%至$250.81。基本面无变化：FY2026营收超$13亿同比增逾三倍，Q1 FY27指引$4.65-4.75亿高于预期。",date:"2026/06/12",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/CRDO/"},{title:"FY2026营收$13亿同比增逾三倍，AI连接需求强劲，涨11.4%",summary:"Credo FY2026营收超$13亿、同比增逾三倍，非GAAP净利润$6.62亿增逾五倍；Q4营收$4.37亿创纪录、超过FY2025全年。AEC有源电缆与超大规模客户需求持续强劲，6月11日随板块大涨11.4%。",date:"2026/06/11",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/CRDO/"},{title:"6月1日发布Q4财报，共识预期营收$4.3亿同比增153%",summary:"AEC有源以太网电缆和超大规模客户需求强劲推动。Zacks共识EPS预期$1.03。",date:"2026/06/01",pub:"Yahoo Finance",url:"https://finance.yahoo.com/markets/stocks/articles/credo-technology-q4-earnings-investors-140900124.html"}]},
+  "ALAB": {founded:"2017",hq:"加州圣克拉拉",employees:"~700",earningsDate:"2026-08-04",revenue:"FY2026E $500M+",marketCap:"$50B+",overview:"Astera Labs是AI服务器内部智能连接芯片的先驱。",products:["PCIe重定时器 [行业先驱/龙头]","CXL内存控制器 [先发优势]"],advantages:["PCIe/CXL连接芯片先发优势","已嵌入所有主流AI服务器平台"],risks:["IPO不久，业绩验证期较短","估值极高"],news:[{title:"6/22正式纳入Nasdaq-100指数在即，被动资金配置预期叠加AI基础设施需求强劲(Q1营收创纪录$3.08亿)，创历史新高大涨11.3%",summary:"6/22正式纳入Nasdaq-100指数在即，被动资金配置预期叠加AI基础设施需求强劲(Q1营收创纪录$3.08亿)，创历史新高大涨11.3%",date:"2026/6/18",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/ALAB/news/"},{title:"6月22日纳入Nasdaq-100指数",summary:"Nasdaq宣布6月季度调整：Astera Labs与CoreWeave、Nebius、Rocket Lab、Teradyne于6月22日开盘前纳入Nasdaq-100。公司IPO以来营收与EPS均增长超5倍，市值约$630亿。指数纳入带来被动资金配置需求。",date:"2026/06/12",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/ALAB/"},{title:"3只具有强劲内部人士信心的成长股",summary:"管理层大量增持。",date:"2026/5/29",pub:"Simply Wall St.",url:"https://finance.yahoo.com/quote/ALAB/news/"}]},
+  "GSIT": {founded:"1995",hq:"加州圣何塞",employees:"~200",earningsDate:"2026-07-30",revenue:"FY2025 ~$25M",marketCap:"~$200M",overview:"GSI Technology是一家从传统SRAM业务转型AI推理芯片的小型半导体公司。",products:["Gemini APU存内计算芯片"],advantages:["存内计算技术架构独特"],risks:["公司极小"],news:[{title:"小盘股流动性偏弱+板块轮动，跌3.1%",summary:"小盘股流动性偏弱+板块轮动，跌3.1%",date:"2026/6/17",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/GSIT/news/"},{title:"GSI Technology确认被纳入Russell 2000指数",summary:"纳入Russell 2000。",date:"2026/5/26",pub:"MT Newswires",url:"https://finance.yahoo.com/quote/GSIT/news/"}]},
+  "SMCI": {founded:"1993",hq:"加州圣何塞",employees:"~5,000",earningsDate:"2026-08-04",revenue:"FY2025 $23B+",marketCap:"~$25B",overview:"Super Micro Computer是全球最大的AI服务器整机解决方案提供商之一。",products:["AI GPU服务器 [速度最快]","液冷散热系统 [行业先驱]"],advantages:["GPU服务器上市速度行业最快","液冷技术领先"],risks:["SEC会计调查后治理风险犹存"],news:[{title:"约$70亿股权融资稀释担忧持续，周内累计跌约28%后再跌4.9%",summary:"约$70亿股权融资稀释担忧持续，周内累计跌约28%后再跌4.9%",date:"2026/6/17",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/SMCI/news/"},{title:"跌入历史支撑区后反弹9.2%，分析师指该区间平均最高反弹近58%",summary:"暴跌28%后，SMCI跌入$27.81-30.73历史支撑区，该区间历史上六次触及后平均最高回报近58%。上季非GAAP EPS $0.84远超预期、营收翻倍至$102亿、毛利率回升至9.9%。$70亿增发用于履行$390亿订单的争议仍在。",date:"2026/06/11",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/SMCI/"},{title:"拟增发约$70亿融资履行$390亿AI服务器订单，收盘暴跌约28%",summary:"公司宣布通过股权及股权挂钩融资募集约$70亿，用于采购零部件以履行近期获得的约$390亿AI服务器订单。庞大积压印证需求，但融资结构引发稀释担忧，6月10日收盘暴跌约28%至$29.27。年初至今仍涨约16%。",date:"2026/06/10",pub:"Yahoo Finance",url:"https://finance.yahoo.com/markets/stocks/articles/super-micro-sinks-13-7-142722341.html"}]},
+  "VRT": {founded:"2016(分拆自Emerson)",hq:"俄亥俄州哥伦布",employees:"~27,000",earningsDate:"2026-07-29",revenue:"FY2025 $8B+",marketCap:"$80B+",overview:"Vertiv是全球领先的数据中心关键基础设施提供商。",products:["数据中心散热 [全球龙头]","配电系统 [龙头]"],advantages:["液冷技术全球领先地位","订单积压额创历史新高"],risks:["订单到收入转化周期6-12个月"],news:[{title:"AI数据中心散热与供电需求叙事升温+并购消息，涨6.0%，Bernstein目标价$416",summary:"AI数据中心散热与供电需求叙事升温+并购消息，涨6.0%，Bernstein目标价$416",date:"2026/6/17",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/VRT/news/"},{title:"数据中心散热需求",summary:"AI功率密度飙升驱动散热需求。",date:"2026/5/29",pub:"Motley Fool",url:"https://finance.yahoo.com/quote/VRT/news/"}]},
+  "CLS": {founded:"1994",hq:"加拿大多伦多",employees:"~23,000",earningsDate:"2026-07-27",revenue:"FY2025 $10B+",marketCap:"$30B+",overview:"Celestica是全球领先的电子制造服务公司。",products:["AI服务器代工 [行业主要EMS]"],advantages:["AI服务器/交换机高端制造能力"],risks:["EMS行业整体利润率偏低"],news:[{title:"Alphabet $800亿资本开支为CCS业务带来$100-160亿增量机会，高估值回调跌7.2%",summary:"Celestica获上调至强力买入，Alphabet $800亿资本开支可为其CCS网络业务解锁$100-160亿增量机会，支撑2026年约70%的营收增长目标。Q1营收同比增53%、调整后EPS增80%。但当前估值偏高(P/E约57x)，6月4日股价回调约7.2%。",date:"2026/06/04",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/CLS/"},{title:"7只分析师看好的高增长盈利股票",summary:"兼具高增长和盈利能力。",date:"2026/5/30",pub:"IBD",url:"https://finance.yahoo.com/quote/CLS/news/"}]},
+  "NBIS": {founded:"2024(分拆自Yandex)",hq:"荷兰阿姆斯特丹",employees:"~3,000",earningsDate:"2026-08-06",revenue:"FY2025 ~$500M",marketCap:"~$58B",overview:"Nebius Group由Yandex的国际AI和云计算业务分拆而来。",products:["AI云基础设施 [新兴玩家]"],advantages:["NVIDIA战略投资背书"],risks:["盈利能力尚未验证"],news:[{title:"完成Eigen AI收购+6/22纳入Nasdaq-100在即，涨6.0%",summary:"完成Eigen AI收购+6/22纳入Nasdaq-100在即，涨6.0%",date:"2026/6/17",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/NBIS/news/"},{title:"获纳入Nasdaq-100指数(6月22日生效)，涨4.6%",summary:"Nasdaq-100六月季度调整将Nebius与Astera Labs、CoreWeave、Rocket Lab、Teradyne一同纳入，6月22日开盘前生效。Q1营收$3.99亿同比增684%，GPU云需求井喷，指数纳入将带来被动配置资金。",date:"2026/06/12",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/NBIS/"},{title:"前OpenAI研究员Leopold Aschenbrenner基金买入5.6%股权",summary:"Leopold Aschenbrenner创立的Situational Awareness对冲基金向SEC提交13G文件，披露持有1240万股NBIS，占公司5.6%股权。Q1营收$3.99亿同比增684%。",date:"2026/06/02",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/NBIS/"},{title:"Nebius Q1营收增684%至$3.99亿",summary:"GPU云算力需求井喷，大幅超预期。",date:"2026/05/30",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/NBIS/news/"}]},
+  "KLAC": {founded:"1997(KLA+Tencor合并)",hq:"加州米尔皮塔斯",employees:"~15,000",earningsDate:"2026-07-30",revenue:"FY2025 $11B+",marketCap:"$130B+",overview:"KLA Corporation是全球半导体工艺控制和良率管理设备的绝对王者。",products:["半导体检测/量测设备 [绝对龙头]"],advantages:["工艺控制设备市占率>55%"],risks:["半导体设备行业周期性"],news:[{title:"10:1拆股后延续强势，先进封装与工艺控制设备需求旺盛，JPMorgan看好2030年盈利增至三倍，涨8.7%",summary:"10:1拆股后延续强势，先进封装与工艺控制设备需求旺盛，JPMorgan看好2030年盈利增至三倍，涨8.7%",date:"2026/6/18",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/KLAC/news/"},{title:"10:1拆股今日生效，股价按拆股后口径交易，涨5.5%",summary:"KLA 10:1拆股于6月12日开盘生效，股价、EPS与目标价均按拆股后口径调整(本表已同步调整)。JPMorgan看好其2030年盈利增至三倍，季度股息上调21%。",date:"2026/06/12",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/KLAC/"},{title:"JPMorgan称2030年盈利有望增至三倍，10:1拆股明日生效，大涨12.9%",summary:"JPMorgan指出先进封装与工艺控制需求可使KLA到2030年盈利增至三倍，叠加Cantor Fitzgerald上调目标价。10:1拆股6月11日收盘后实施、6月12日起按拆股后价格交易，季度股息上调21%。过去一年股价涨约150%。",date:"2026/06/11",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/KLAC/"},{title:"KLA宣布10:1拆股，6月12日生效",summary:"KLA Corporation宣布10:1股票拆分，先进封装检测需求推动Q3业绩强劲，股价自上次财报以来涨10%。",date:"2026/06/01",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/KLAC/"}]},
+  "PLAB": {founded:"1969",hq:"康涅狄格州布鲁克菲尔德",employees:"~2,200",earningsDate:"2026-08-26",revenue:"FY2025 ~$900M",marketCap:"~$3.5B",overview:"Photronics是全球仅有的几家能生产先进光掩膜的公司之一。",products:["光掩膜(Photomask) [全球龙头]"],advantages:["全球光掩膜寡头垄断地位"],risks:["部分客户延迟下单"],news:[{title:"半导体板块全线反弹，光掩膜寡头需求受益于AI芯片产能扩张，涨8.4%",summary:"半导体板块全线反弹，光掩膜寡头需求受益于AI芯片产能扩张，涨8.4%",date:"2026/6/18",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/PLAB/news/"},{title:"Photronics CEO警告延迟和供应紧张",summary:"光掩膜交期延长。",date:"2026/5/29",pub:"Benzinga",url:"https://finance.yahoo.com/quote/PLAB/news/"}]},
+  "AMKR": {founded:"1968",hq:"亚利桑那州坦佩",employees:"~30,000",earningsDate:"2026-07-27",revenue:"FY2025 ~$7B",marketCap:"~$9B",overview:"Amkor Technology是全球第二大半导体封装和测试代工厂。",products:["半导体先进封装 [行业#2]"],advantages:["先进封装全技术覆盖"],risks:["台积电自有产能竞争"],news:[{title:"先进封装需求+亚利桑那园区进展，大涨8.7%创52周新高",summary:"投资者回流半导体板块，Amkor作为先进封装代工龙头受益于AI芯片封装产能紧张。亚利桑那州先进封装园区建设推进，公司计划2026年在纽约举办投资者日。年初至今涨77%，一年累计涨277%。",date:"2026/06/12",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/AMKR/"},{title:"Amkor Technology值得关注的理由",summary:"先进封装需求爆发式增长。",date:"2026/5/29",pub:"Zacks",url:"https://finance.yahoo.com/quote/AMKR/news/"}]},
+  "AXTI": {founded:"1986",hq:"加州弗里蒙特",employees:"~1,000",earningsDate:"2026-07-30",revenue:"FY2025 ~$120M",marketCap:"~$1.2B",overview:"AXT Inc是化合物半导体衬底材料的全球主要供应商。",products:["化合物半导体衬底 [行业主要供应商]"],advantages:["InP衬底在AI光通信中不可替代"],risks:["中国工厂面临地缘政治风险"],news:[{title:"拟将授权普通股本提高(7000万→1.2亿股)引发稀释担忧，叠加中国出口许可时点不确定，自历史高位继续回落，领跌关注列表跌8.2%",summary:"拟将授权普通股本提高(7000万→1.2亿股)引发稀释担忧，叠加中国出口许可时点不确定，自历史高位继续回落，领跌关注列表跌8.2%",date:"2026/6/18",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/AXTI/news/"},{title:"增发授权股本(7000万→1.2亿股)稀释担忧+获利回吐，自历史高位重挫16.0%",summary:"6月15日AXT随半导体板块抛售并因拟将授权普通股从7000万股提高至1.2亿股的稀释担忧及前期暴涨后的获利回吐而重挫约16%，盘中自历史高位回落。基本面未变：InP磷化铟AI/数据中心需求强劲、Q1营收与毛利率创新高、$1亿积压，年内仍涨约368%。出口许可时点为主要风险。",date:"2026/06/15",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/AXTI/"},{title:"InP短缺叙事+空头回补，再涨10.0%创历史新高",summary:"AI数据中心光互连对磷化铟衬底需求强劲，叠加高空头仓位的回补动态推动股价延续涨势。公司上周完成$6.325亿融资支持Tongmei InP产能扩张及6英寸InP研发；6月4日年度股东会批准授权股本从7000万股增至1.2亿股。一年涨幅超5100%。",date:"2026/06/12",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/AXTI/"},{title:"InP磷化铟AI需求爆发，年初至今涨超650%，逆势大涨12.7%",summary:"磷化铟衬底是AI数据中心高速光传输的关键材料，Q1 InP营收$1360万环比增至（上季$800万）。公司完成$6.325亿募资扩产，预计2026年底季度产能升至约$3500万。逆势创历史新高。",date:"2026/06/10",pub:"Yahoo Finance",url:"https://finance.yahoo.com/markets/stocks/articles/axti-surges-more-650-ytd-181600813.html"}]},
+  "ALMU": {founded:"2020",hq:"加州圣安娜",employees:"~50",earningsDate:"2026-09-29",revenue:"Pre-revenue",marketCap:"~$200M",overview:"Aeluma是一家新兴光电半导体公司。",products:["光电半导体外延片 [技术先驱]"],advantages:["UCSB顶级研究团队背景"],risks:["极早期公司，几乎无营收"],news:[{title:"获NASA量子点激光器合同等6份新订单共$500万，涨21.5%",summary:"新获6份合同共$500万，其中超$400万来自美国政府机构，含NASA量子点集成激光器奖项。Q3营收$120万。",date:"2026/06/01",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/ALMU/news/"}]},
+  "NVTS": {founded:"2014",hq:"加州托兰斯",employees:"~400",earningsDate:"2026-08-03",revenue:"FY2025 ~$100M",marketCap:"~$4B",overview:"Navitas Semiconductor是氮化镓功率芯片的先驱。",products:["GaN功率芯片 [行业先驱/龙头之一]"],advantages:["GaN功率芯片技术全球领先"],risks:["公司仍在持续亏损"],news:[{title:"GaN功率芯片受AI数据中心800V供电叙事提振，自前期回调中反弹，涨7.5%",summary:"GaN功率芯片受AI数据中心800V供电叙事提振，自前期回调中反弹，涨7.5%",date:"2026/6/18",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/NVTS/news/"},{title:"增发328万股稀释+董事辞职，自NVIDIA 800V合作所创52周高点回落，收跌10.3%",summary:"Navitas因NVIDIA MGX 800V DC AI基础设施合作此前升至52周高点约$34。6月4日公司按业务合并协议发行3,283,844股Class A股票(累计已发行656万股)引发稀释担忧，叠加董事Ranbir Singh于6月9日辞职，6月10日收跌10.3%。分析师12个月目标均价约$14.46、共识为持有。",date:"2026/06/10",pub:"Investing.com",url:"https://www.investing.com/news/stock-market-news/why-is-navitas-semiconductor-stock-sliding-today-93CH-4728855"}]},
+  "SMTC": {founded:"1960",hq:"加州卡马里奥",employees:"~4,800",earningsDate:"2026-08-24",revenue:"FY2025 ~$900M",marketCap:"~$10B",overview:"Semtech是模拟和混合信号半导体的专业厂商。",products:["LoRa物联网芯片 [绝对龙头]","信号完整性芯片 [领先]"],advantages:["LoRa IoT生态系统全球最大"],risks:["Sierra Wireless整合仍在进行"],news:[{title:"前期大涨后估值担忧(约55倍前瞻PE)，获利回吐跌7.0%",summary:"前期大涨后估值担忧(约55倍前瞻PE)，获利回吐跌7.0%",date:"2026/6/17",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/SMTC/news/"},{title:"NVIDIA持续作为AI核心引擎",summary:"AI产业链研究报告。",date:"2026/5/29",pub:"Barrons.com",url:"https://finance.yahoo.com/quote/SMTC/news/"}]},
+  "SANM": {founded:"1980",hq:"加州圣何塞",employees:"~30,000",earningsDate:"2026-07-27",revenue:"FY2025 ~$8B",marketCap:"~$6B",overview:"Sanmina是全球顶级电子制造服务公司之一。",products:["电子制造服务EMS [全球前十]"],advantages:["高端PCB技术全球领先"],risks:["EMS行业利润率偏低"],news:[{title:"Sanmina一年上涨213%后还能买吗",summary:"AI产业链涨幅惊人。",date:"2026/5/29",pub:"Simply Wall St.",url:"https://finance.yahoo.com/quote/SANM/news/"}]},
+  "TTMI": {founded:"1998",hq:"加州圣安娜",employees:"~30,000",earningsDate:"2026-07-29",revenue:"FY2025 ~$2.5B",marketCap:"~$10B",overview:"TTM Technologies是北美最大的PCB制造商之一。",products:["高端PCB [行业领先]","航空航天PCB [龙头]"],advantages:["高端PCB技术能力强"],risks:["PCB行业整体竞争激烈"],news:[{title:"TTMI展示Swing Trading规则",summary:"AI PCB概念驱动上升。",date:"2026/5/29",pub:"IBD",url:"https://finance.yahoo.com/quote/TTMI/news/"}]},
+  "COHR": {founded:"1971(II-VI/Coherent合并)",hq:"宾州匹兹堡",employees:"~28,000",earningsDate:"2026-08-13",revenue:"FY2025 $6B+",marketCap:"~$83B",overview:"Coherent是全球光通信和光学材料领域的龙头企业。NVIDIA已投资$20亿。",products:["光模块/光收发器 [行业龙头之一]"],advantages:["800G光模块出货量全球领先","NVIDIA $20亿战略投资"],risks:["光模块竞争激烈"],news:[{title:"光通信涨势延续，涨5.9%；YTD涨约126%",summary:"AI光互连需求推动光模块板块延续强势。FQ3营收$18.05亿同比增21%，数据中心与通信业务$13.61亿同比增41%、占营收75%。NVIDIA $20亿战略投资构成结构性利好。",date:"2026/06/12",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/COHR/"},{title:"NVIDIA投资$20亿+黄仁勋光通信言论催化，涨17.6%创历史新高",summary:"黄仁勋Computex强调光互连重要性，NVIDIA已向光通信公司投资超$65亿(COHR $20亿、LITE $20亿、GLW $5亿)。Q3营收$18.1亿同比增21%。",date:"2026/06/02",pub:"Yahoo Finance",url:"https://finance.yahoo.com/markets/stocks/articles/coherent-advances-16-lumentum-climbs-164337686.html"}]},
+  "LITE": {founded:"2018(分拆自JDS Uniphase)",hq:"加州圣何塞",employees:"~6,000",earningsDate:"2026-08-18",revenue:"FY2026E $3B+",marketCap:"~$75B",overview:"Lumentum Holdings是全球领先的光子学公司。NVIDIA已投资$20亿。",products:["光模块 [行业龙头之一]","ROADM/WSS [绝对龙头]"],advantages:["光通信技术积累深厚","NVIDIA $20亿战略投资","正在大规模扩建产能"],risks:["3D传感业务下滑"],news:[{title:"NVIDIA $20亿投资+光互连转向，OCS积压超$4亿，逆势涨5.6%",summary:"NVIDIA向光互连转向使Lumentum处于AI数据中心核心。Q3营收$8.08亿、调整后EPS $2.37，OCS积压超$4亿，并获数亿美元共封装光学(CPO)增量订单。年初至今涨约167%。",date:"2026/06/10",pub:"Yahoo Finance",url:"https://finance.yahoo.com/markets/stocks/articles/nvidia-optics-shift-puts-lumentum-061120526.html"}]},
+  "CIEN": {founded:"1992",hq:"马里兰州汉诺威",employees:"~8,000",earningsDate:"2026-09-03",revenue:"FY2026E $4.5B+",marketCap:"~$30B",overview:"Ciena是全球光网络设备的领导者。",products:["光网络设备 [行业龙头]"],advantages:["相干光引擎技术全球第一"],risks:["电信客户资本开支周期性"],news:[{title:"Q2营收$15.7亿同比增40%，调整后EPS $1.64超预期并上调FY26指引，卖事实股价大跌13.7%",summary:"Ciena Q2 FY26营收$15.7亿(+40%)，调整后EPS $1.64超预期$1.49且同比增290%。上调FY26营收指引至$63亿(中点+32%)，Q3指引$16.25亿。尽管业绩强劲，股价买预期卖事实大跌13.7%。下次财报9月3日。",date:"2026/06/04",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/CIEN/"},{title:"BofA上调Ciena目标价",summary:"AI数据中心光网络需求加速。",date:"2026/5/31",pub:"Insider Monkey",url:"https://finance.yahoo.com/quote/CIEN/news/"}]},
+  "GLW": {founded:"1851",hq:"纽约州康宁",employees:"~50,000",earningsDate:"2026-07-28",revenue:"FY2025 $14B+",marketCap:"~$50B",overview:"Corning(康宁)是一家拥有175年历史的材料科学巨头。",products:["光纤 [绝对龙头，全球#1]","特种玻璃 [垄断级]"],advantages:["光纤市场全球龙头地位","AI数据中心建设推动光纤需求"],risks:["显示面板玻璃市场疲软"],news:[{title:"亚马逊宣布数十亿美元多年期光纤供应协议供其美国数据中心，继Meta、英伟达后再添AI基建大单，大涨11.1%",summary:"亚马逊宣布数十亿美元多年期光纤供应协议供其美国数据中心，继Meta、英伟达后再添AI基建大单，大涨11.1%",date:"2026/6/18",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/GLW/news/"},{title:"Leopold Aschenbrenner披露持有Corning持仓",summary:"AI基础设施隐形冠军。",date:"2026/5/31",pub:"Insider Monkey",url:"https://finance.yahoo.com/quote/GLW/news/"}]},
+  "AAOI": {founded:"1997",hq:"德州休斯顿",employees:"~2,500",earningsDate:"2026-08-06",revenue:"FY2025 ~$350M",marketCap:"~$3B",overview:"Applied Optoelectronics是光收发器模块的专业制造商。",products:["光收发器 [行业主要玩家]"],advantages:["垂直整合降低成本"],risks:["历史业绩波动极大"],news:[{title:"共封装光学(CPO)出货或延迟的报告叠加前期大涨获利回吐，跌3.3%",summary:"共封装光学(CPO)出货或延迟的报告叠加前期大涨获利回吐，跌3.3%",date:"2026/6/18",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/AAOI/news/"},{title:"共封装光学(CPO)出货或延迟报告+板块抛售，跌10.8%",summary:"6月15日有报告称共封装光学(CPO)出货时间可能推迟，叠加AI半导体板块整体抛售，AAOI获利回吐跌约10.8%(此前一个交易日曾大涨)。公司基本面稳健：已披露超$3.24亿超大规模客户订单，2026年营收预计超$11亿，管理层称需求超过产能至2027年中。年内仍涨约405%。",date:"2026/06/15",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/AAOI/"},{title:"锁定超$3.24亿 800G/1.6T订单，目标价上调至$220，逆势涨8.5%",summary:"公司锁定逾$3.24亿 800G/1.6T超大规模云订单，Q1数据中心营收同比增154%至$8140万。Rosenblatt上调目标价至$220、Raymond James上调至$160。仍处亏损，Q2 EPS指引约盈亏平衡。",date:"2026/06/10",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/AAOI/news/"}]},
+  "POET": {founded:"2000",hq:"加拿大多伦多",employees:"~100",earningsDate:"2026-08-11",revenue:"Pre-revenue",marketCap:"~$500M",overview:"POET Technologies开发的光子集成平台有望改变光模块制造方式。",products:["光子集成平台 [技术先驱]"],advantages:["集成光子技术有望颠覆传统制造"],risks:["极早期商业化阶段"],news:[{title:"光通信板块波动延续+前期$4亿融资稀释消化，跌5.5%",summary:"光通信板块波动延续+前期$4亿融资稀释消化，跌5.5%",date:"2026/6/17",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/POET/news/"},{title:"Lumilens战略合作$5000万首单+$4亿融资，大涨11.4%",summary:"POET签署Lumilens战略合作，面向前沿AI的晶圆级光子集成，首批订单$5000万、五年内可扩至超$5亿。同时完成$4亿非经纪注册直接发行(发行价小幅溢价，附三年期、行权价$26.15认股权证)。6月26日股东大会将审议美国迁册计划。营收仍很小，稀释与执行风险偏高。",date:"2026/06/12",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/POET/"},{title:"为什么POET Technologies本周股价暴跌",summary:"商业化进展不及预期。",date:"2026/5/31",pub:"Motley Fool",url:"https://finance.yahoo.com/quote/POET/news/"}]},
+  "LWLG": {founded:"1998",hq:"特拉华州纽瓦克",employees:"~30",earningsDate:"2026-08-13",revenue:"Pre-revenue",marketCap:"~$300M",overview:"Lightwave Logic开发有机电光聚合物材料。",products:["电光聚合物(EO Polymer) [全球唯一]"],advantages:["电光聚合物性能远超传统铌酸锂"],risks:["纯研发阶段"],news:[{title:"Lightwave Logic Q1 2026财报",summary:"电光聚合物验证进展积极。",date:"2026/5/14",pub:"Moby",url:"https://finance.yahoo.com/quote/LWLG/news/"}]},
+  "RMBS": {founded:"1990",hq:"加州圣何塞",employees:"~800",earningsDate:"2026-07-27",revenue:"FY2025 ~$600M",marketCap:"~$10B",overview:"Rambus是内存接口芯片和安全IP授权的隐形冠军。",products:["内存接口芯片 [绝对垄断，份额>90%]"],advantages:["DDR5接口芯片市占率领先"],risks:["DDR5渗透率已较高"],news:[{title:"内存超级周期叙事外溢，DDR5接口芯片需求强劲(市占率超90%)，涨8.5%",summary:"内存超级周期叙事外溢，DDR5接口芯片需求强劲(市占率超90%)，涨8.5%",date:"2026/6/18",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/RMBS/news/"},{title:"Rambus多月强势上涨后估值评估",summary:"DDR5内存接口芯片需求增长。",date:"2026/5/29",pub:"Simply Wall St.",url:"https://finance.yahoo.com/quote/RMBS/news/"}]},
+  "SIMO": {founded:"1995",hq:"加州圣何塞(开曼注册)",employees:"~2,000",earningsDate:"2026-07-29",revenue:"FY2025 ~$900M",marketCap:"~$5B",overview:"Silicon Motion Technology是全球领先的NAND闪存控制器芯片设计公司。",products:["NAND闪存控制器 [行业龙头]"],advantages:["NAND控制器全球市占率前二"],risks:["NAND行业强周期性"],news:[{title:"AI存储需求升温，SM2524XT PCIe Gen5控制器新品+NAND供应趋紧，逆势大涨8.7%",summary:"AI存储需求升温，SM2524XT PCIe Gen5控制器新品+NAND供应趋紧，逆势大涨8.7%",date:"2026/6/17",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/SIMO/news/"},{title:"Silicon Motion推出AI优化的SSD控制器",summary:"PCIe Gen5 SSD控制器。",date:"2026/5/28",pub:"Business Wire",url:"https://finance.yahoo.com/quote/SIMO/news/"}]},
+  "MRAM": {founded:"2008",hq:"亚利桑那州钱德勒",employees:"~200",earningsDate:"2026-08-12",revenue:"FY2025 ~$55M",marketCap:"~$300M",overview:"Everspin Technologies是全球唯一一家专注于MRAM的上市公司。",products:["MRAM磁性存储 [全球唯一上市纯正标的]"],advantages:["MRAM领域全球唯一专业上市公司"],risks:["市场规模极小"],news:[{title:"为什么围绕Everspin的叙事正在转变",summary:"AI边缘计算应用。",date:"2026/5/24",pub:"Simply Wall St.",url:"https://finance.yahoo.com/quote/MRAM/news/"}]},
+  "DRAM": {founded:"2023",hq:"N/A(iShares ETF)",employees:"N/A(ETF)",earningsDate:"",revenue:"N/A",marketCap:"N/A(ETF)",overview:"iShares Semiconductor DRAM ETF追踪DRAM产业链公司。",products:["DRAM行业ETF [被动投资工具]"],advantages:["一篮子投资分散单股风险"],risks:["DRAM行业强周期性"],news:[{title:"DRAM短缺将延续到2028年",summary:"Micron受益最大。",date:"2026/5/31",pub:"Barchart",url:"https://finance.yahoo.com/quote/DRAM/news/"}]},
+  "SNDK": {founded:"2024(分拆自Western Digital)",hq:"加州米尔皮塔斯",employees:"~12,000",earningsDate:"2026-08-24",revenue:"FY2025 ~$7B",marketCap:"~$25B",overview:"SanDisk是从Western Digital分拆出来的独立闪存公司。",products:["消费级闪存 [行业龙头之一]","企业级SSD [前三]"],advantages:["全球闪存品牌第一梯队"],risks:["NAND行业强周期性"],news:[{title:"摩根士丹利看多多年期存储上行周期，与BofA上调目标价至$1750-$2100，HBF高带宽闪存新品研发推进，创历史新高大涨11.5%",summary:"摩根士丹利看多多年期存储上行周期，与BofA上调目标价至$1750-$2100，HBF高带宽闪存新品研发推进，创历史新高大涨11.5%",date:"2026/6/18",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/SNDK/news/"},{title:"Morgan Stanley看多AI存储超级周期，大涨14.5%创历史新高",summary:"Morgan Stanley称DRAM与NAND供应受限叠加AI需求将带来持续多年的存储上行周期，大幅上调盈利预期。Susquehanna目标价街内最高$3250，Cantor $2900、Mizuho $2200、BofA $2100。NAND需求向长期协议转移，提供多年期可见性。分析师共识买入。",date:"2026/06/11",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/SNDK/"},{title:"Leopold Aschenbrenner看好SanDisk",summary:"AI数据中心SSD需求增长。",date:"2026/5/31",pub:"Insider Monkey",url:"https://finance.yahoo.com/quote/SNDK/news/"}]},
+  "WDC": {founded:"1970",hq:"加州圣何塞",employees:"~25,000",earningsDate:"2026-07-29",revenue:"FY2025 ~$8B",marketCap:"~$20B",overview:"Western Digital分拆SanDisk后成为纯正HDD公司。",products:["HDD硬盘 [双寡头之一]"],advantages:["大容量HDD成本优势无可替代"],risks:["HDD长期被SSD替代趋势不可逆"],news:[{title:"AI-HDD超级周期延续、毛利率突破50%，大行上调目标价至中$600区间，再创历史新高涨4.8%",summary:"AI-HDD超级周期延续、毛利率突破50%，大行上调目标价至中$600区间，再创历史新高涨4.8%",date:"2026/6/18",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/WDC/news/"},{title:"AI-HDD超级周期延续、毛利率破50%，再创历史新高涨4.6%",summary:"AI-HDD超级周期延续、毛利率破50%，再创历史新高涨4.6%",date:"2026/6/17",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/WDC/news/"},{title:"逆势创历史新高：MS/JPM上调AI-HDD目标价至中$600，涨4.2%",summary:"在板块普跌中WDC逆势上涨约4.2%并触及历史新高(盘中约$713)，受Morgan Stanley、JPMorgan等大行上调AI-HDD目标价至中$600区间提振。MS预计2028年前HDD需求年增40-50%、供给仅增30-35%，将WDC 2028 EPS预估上调70%。公司2026年产能售罄、利润率创纪录50.5%，年内涨超200%。",date:"2026/06/15",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/WDC/"},{title:"毛利率首破50%，涨6.4%创52周新高",summary:"Western Digital毛利率历史上首次突破50%，年初至今涨约173%。HDD供应紧张+AI数据中心存储需求推动定价持续走强，街内最高目标价$685(约30%上行空间)，均值目标价随近期上调持续上移。",date:"2026/06/12",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/WDC/"},{title:"Evercore对Western Digital有新看法",summary:"AI数据存储需求增长。",date:"2026/5/31",pub:"Insider Monkey",url:"https://finance.yahoo.com/quote/WDC/news/"}]},
+  "STX": {founded:"1978",hq:"加州弗里蒙特(注册爱尔兰)",employees:"~30,000",earningsDate:"2026-07-28",revenue:"FY2025 ~$8B",marketCap:"~$20B",overview:"Seagate是全球最大的HDD制造商。",products:["HDD硬盘 [双寡头之一]","HAMR技术 [行业首发]"],advantages:["HDD市场占有率全球第一","HAMR技术领先"],risks:["HDD被SSD替代是长期趋势"],news:[{title:"2026年HDD产能全部售罄，大涨7.3%，52周涨近700%",summary:"AI应用对高容量硬盘需求旺盛，管理层表示2026年HDD产能已全部承诺(fully committed)。Seagate与Western Digital构成HDD双寡头，均受益于AI基础设施存储扩容。分析师共识目标价$293。",date:"2026/06/12",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/STX/"},{title:"Barclays上调Seagate目标价",summary:"AI数据存储需求推动HDD需求。",date:"2026/5/31",pub:"Insider Monkey",url:"https://finance.yahoo.com/quote/STX/news/"}]},
+  "HIMX": {founded:"2001",hq:"中国台湾台南",employees:"~1,700",earningsDate:"2026-08-06",revenue:"FY2025 ~$1B",marketCap:"~$3.5B",overview:"Himax Technologies是全球领先的显示驱动IC设计公司。",products:["显示驱动IC(DDIC) [全球前三]","WiseEye AI传感器 [差异化]"],advantages:["显示驱动IC全球领先地位"],risks:["显示面板行业强周期性"],news:[{title:"Q2营收指引环比增10-13%、毛利率扩张160bps，但CPI日中小盘半导体普跌，收跌11.2%",summary:"Himax给出强劲Q2指引：营收环比增10-13%、每ADS盈利$0.086-0.103，汽车Tcon与本地调光Tcon放量是主要驱动。但6月10日CPI偏热引发风险偏好回落，中小盘半导体普跌，公司回吐月内涨幅收跌11.2%。另宣布每ADS派息$0.24(除息6月30日)。",date:"2026/06/10",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/HIMX/"}]},
+  "KOPN": {founded:"1984",hq:"马萨诸塞州韦斯特伯勒",employees:"~200",earningsDate:"2026-08-11",revenue:"FY2025 ~$50M",marketCap:"~$500M",overview:"Kopin Corporation是微型显示器技术的先驱。",products:["微显示器 [行业龙头]","军用头盔显示 [绝对龙头]"],advantages:["军事微型显示器全球领先"],risks:["公司规模极小"],news:[{title:"Kopin国防微显示器估值分析",summary:"军事头盔显示系统应用。",date:"2026/5/25",pub:"Simply Wall St.",url:"https://finance.yahoo.com/quote/KOPN/news/"}]},
+  "VST": {founded:"2016(分拆自Dynegy)",hq:"德州欧文",employees:"~6,000",earningsDate:"2026-08-06",revenue:"FY2025 ~$16B",marketCap:"~$50B",overview:"Vistra是美国最大的独立发电商之一。",products:["天然气发电 [美国最大独立发电商之一]","核电 [独特资产]"],advantages:["美国最大独立发电商(41GW)","核电资产在AI电力中不可替代"],risks:["电力价格波动影响收入"],news:[{title:"AI数据中心电力需求叙事支撑，逆势涨3.3%",summary:"6月15日Vistra在板块抛售中逆势上涨约3.3%，AI数据中心电力需求成为公用事业核心叙事，其核电与燃气基荷资产有望满足大型科技公司的基荷需求。2026年调整后EBITDA与自由现金流预计走强(Cogentrix整合、核电提效、对冲组合)。8位分析师中值目标价$232。",date:"2026/06/15",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/VST/"},{title:"作为首选电力供应商参与KKR $100亿AI基建公司Helix，涨5.7%",summary:"KKR发起Helix Digital Infrastructure，获逾$100亿承诺资本，科威特投资局、NVIDIA与Vistra为锚定投资人，前AWS CEO Adam Selipsky执掌。Vistra将担任首选电力供应商，受益于数据中心建设导致的电力供应紧张。",date:"2026/06/11",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/VST/"},{title:"分析师上调Vistra目标价$4",summary:"AI数据中心电力需求增长。",date:"2026/5/30",pub:"Insider Monkey",url:"https://finance.yahoo.com/quote/VST/news/"}]},
+  "BE": {founded:"2001",hq:"加州圣何塞",employees:"~3,000",earningsDate:"2026-07-29",revenue:"FY2025 ~$1.5B",marketCap:"~$20B",overview:"Bloom Energy是固体氧化物燃料电池技术的全球领导者。",products:["固体氧化物燃料电池 [绝对龙头]"],advantages:["SOFC技术全球领先(效率>60%)"],risks:["尚未实现持续盈利"],news:[{title:"AI数据中心电力需求叙事强化，$50亿Brookfield AI合作叠加Daiwa/UBS上调目标价至高$260-低$320区间，FY26营收指引$34-38亿，居关注列表涨幅榜首大涨15.4%",summary:"AI数据中心电力需求叙事强化，$50亿Brookfield AI合作叠加Daiwa/UBS上调目标价至高$260-低$320区间，FY26营收指引$34-38亿，居关注列表涨幅榜首大涨15.4%",date:"2026/6/18",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/BE/news/"},{title:"CPI偏热致燃料电池股回调9.6%，但扩产可六个月自筹回本",summary:"6月10日股价在$230-259区间波动。受CPI数据偏热、风险偏好下行拖累回调。但管理层重申不需增发即可自筹扩产，预计六个月内通过销售收回新建产能成本。过去12个月涨约1396%。",date:"2026/06/10",pub:"Yahoo Finance",url:"https://finance.yahoo.com/markets/stocks/articles/bloom-energy-valuation-check-ai-100811836.html"}]},
+  "APLD": {founded:"2001",hq:"德州达拉斯",employees:"~200",earningsDate:"2026-07-29",revenue:"FY2025 ~$200M",marketCap:"~$5B",overview:"Applied Digital运营下一代大规模AI数据中心。",products:["AI数据中心 [新兴]","GPU-as-a-Service [竞争者]"],advantages:["AI算力供不应求","比AWS更灵活的GPU交付"],risks:["公司仍在亏损阶段"],news:[{title:"第三份15年期租约(210MW)锁定约$52亿合约收入，总积压达$360亿，但6月获利回吐收跌7.1%",summary:"Applied Digital与同一投资级超大规模客户签署第三份15年期租约，涉及Delta Forge 2园区210MW IT负载，带来约$52亿合约收入(续约可达$127亿)。公司总合约租赁收入约$360亿(全部行权达$860亿)，约70%由美国投资级超大规模客户背书。但6月获利回吐，10日收跌7.1%，年初至今仍涨约66%，分析师维持强力买入、均价$65.83。",date:"2026/06/10",pub:"TipRanks",url:"https://www.tipranks.com/news/why-is-applied-digital-stock-apld-soaring-today-june-9-2026"}]},
+  "IREN": {founded:"2018",hq:"澳大利亚悉尼",employees:"~200",earningsDate:"2026-08-27",revenue:"FY2025 ~$300M",marketCap:"~$8B",overview:"Iris Energy使用可再生能源运营数据中心。",products:["AI/HPC数据中心 [新兴]"],advantages:["可再生能源成本优势"],risks:["比特币价格波动仍影响利润"],news:[{title:"南澳800MW数据中心园区+$36.5亿投资级GPU融资落地，涨10.1%",summary:"IREN宣布其首个澳大利亚数据中心园区(南澳800MW)，并完成$36.5亿投资级GPU融资。此前与NVIDIA签订5GW战略合作及$34亿、5年期AI云合约，Blackwell系统投运后ARR预计从$37亿升至$44亿。",date:"2026/06/11",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/IREN/"},{title:"Leopold Aschenbrenner看涨Iris Energy",summary:"可再生能源+AI算力商业模式。",date:"2026/5/31",pub:"Insider Monkey",url:"https://finance.yahoo.com/quote/IREN/news/"}]},
+  "LEU": {founded:"1998(USEC拆分)",hq:"马里兰州贝塞斯达",employees:"~400",earningsDate:"2026-08-04",revenue:"FY2025 ~$300M",marketCap:"~$3B",overview:"Centrus Energy是美国唯一获得NRC许可进行铀浓缩的私营公司。",products:["低浓缩铀燃料 [美国唯一]","HALEU高纯度铀 [全美唯一许可]"],advantages:["美国唯一私营铀浓缩能力"],risks:["核能政策和监管不确定性"],news:[{title:"核燃料供应链与能源安全政策关注升温，$39亿订单积压至2040年、Piketon铀浓缩扩产，大涨12.4%",summary:"核燃料供应链与能源安全政策关注升温，$39亿订单积压至2040年、Piketon铀浓缩扩产，大涨12.4%",date:"2026/6/18",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/LEU/news/"},{title:"分析师维持Centrus Energy持有评级",summary:"核能复兴受益。",date:"2026/5/30",pub:"Insider Monkey",url:"https://finance.yahoo.com/quote/LEU/news/"}]},
+  "GEV": {founded:"2024(分拆自GE)",hq:"佛罗里达州斯科特代尔",employees:"~80,000",earningsDate:"2026-07-22",revenue:"FY2025 ~$35B",marketCap:"~$100B+",overview:"GE Vernova是从通用电气分拆出来的能源业务独立上市公司。",products:["燃气轮机 [全球龙头]","电网设备 [龙头]"],advantages:["全球发电/电网设备龙头地位"],risks:["海上风电业务利润率极低"],news:[{title:"上调2026营收指引至$445-455亿，AI数据中心电力订单创纪录，涨6.8%",summary:"上调2026营收指引至$445-455亿，AI数据中心电力订单创纪录，涨6.8%",date:"2026/6/17",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/GEV/news/"},{title:"Q1数据中心电气化订单$24亿创纪录，CPI日能源股普跌6.3%",summary:"Q1营收$93.4亿同比增16%，电气化部门数据中心设备订单$24亿超去年全年，新增订单$183亿增71%，总积压$1630亿。上调全年营收指引至$445-455亿。CPI偏热日能源板块整体回调。",date:"2026/06/10",pub:"Yahoo Finance",url:"https://finance.yahoo.com/markets/stocks/articles/ge-vernova-gev-power-ai-171216454.html"}]},
+  "ETN": {founded:"1911",hq:"爱尔兰都柏林(运营总部俄亥俄)",employees:"~100,000",earningsDate:"2026-07-28",revenue:"FY2025 $25B+",marketCap:"$155B+",overview:"Eaton Corporation是全球领先的电力管理公司，是AI数据中心电气基础设施的核心供应商。Q1营收$75亿同比增17%创新高，上调全年指引。",products:["数据中心配电(PDU/UPS) [行业龙头]","电气开关设备 [全球前二]","电力变压器 [行业领先]"],advantages:["数据中心电力管理全球龙头","AI电力需求驱动有机增长9-11%","连续多年上调全年指引"],risks:["估值偏高(PE~39x)","部分业务受工业周期影响"],news:[{title:"Q1营收$75亿同比增17%创新高，上调全年EPS指引至$13.05-$13.50",summary:"数据中心和AI基础设施需求推动强劲增长。有机增长指引上调至9-11%。投资者将Eaton视为AI电气化和数据中心电力基础设施的主要受益者。",date:"2026/06/02",pub:"Yahoo Finance",url:"https://finance.yahoo.com/markets/stocks/articles/look-eaton-etn-valuation-raised-181549695.html"}]},
+  "MP": {founded:"2017",hq:"内华达州拉斯维加斯",employees:"~600",earningsDate:"2026-08-06",revenue:"FY2025 ~$200M",marketCap:"~$5B",overview:"MP Materials是西半球最大的稀土生产商。",products:["稀土开采 [美国唯一/西方最大]"],advantages:["西半球唯一大规模稀土矿"],risks:["稀土价格波动大"],news:[{title:"G7承诺降低稀土对外依赖+五角大楼$5亿贷款支持，大涨6.6%",summary:"G7承诺降低稀土对外依赖+五角大楼$5亿贷款支持，大涨6.6%",date:"2026/6/17",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/MP/news/"},{title:"无人机概念股大涨：Trump政府推动国防资金",summary:"稀土供应链安全。",date:"2026/5/28",pub:"IBD",url:"https://finance.yahoo.com/quote/MP/news/"}]},
+  "IBM": {founded:"1911",hq:"纽约州阿蒙克",employees:"~280,000",earningsDate:"2026-07-22",revenue:"FY2025 $63B+",marketCap:"$300B+",overview:"IBM是全球最老牌的科技巨头之一，正在AI和量子计算两条主线上焕发新生。",products:["企业AI平台 [龙头]: watsonx","混合云 [行业#3]","量子计算 [行业龙头]"],advantages:["量子计算全球领先","连续29年股息增长"],risks:["云市场份额远落后AWS/Azure"],news:[{title:"Accenture下调全年营收指引引发IT服务板块抛售，叠加企业AI依赖度担忧与美联储鹰派点阵图，跌5.1%",summary:"Accenture下调全年营收指引引发IT服务板块抛售，叠加企业AI依赖度担忧与美联储鹰派点阵图，跌5.1%",date:"2026/6/18",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/IBM/news/"},{title:"前期反弹后获利回吐跌3.1%，目标价约$297维持买入",summary:"前期反弹后获利回吐跌3.1%，目标价约$297维持买入",date:"2026/6/17",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/IBM/news/"},{title:"IBM获选NVIDIA Vera Rubin AI加速器合作伙伴，涨7.6%创新高",summary:"IBM将为NVIDIA新一代Vera Rubin AI加速器提供系统构建、云服务和安全AI存储基础设施。Barclays给予增持评级。",date:"2026/06/01",pub:"Yahoo Finance",url:"https://finance.yahoo.com/markets/stocks/articles/ibm-shares-surge-old-clip-141836172.html"},{title:"Trump称赞IBM CEO视频重现，盘前一度涨15%",summary:"一段约六个月前Trump称赞IBM CEO的视频在社交媒体重新传播，推动IBM市值单日增加超$280亿。",date:"2026/06/01",pub:"Yahoo Finance",url:"https://uk.finance.yahoo.com/news/ibm-shares-surge-15-trump-122218041.html"}]},
+  "DELL": {founded:"1984",hq:"德州Round Rock",employees:"~120,000",earningsDate:"2026-09-03",revenue:"FY2026 $100B+",marketCap:"$320B+",overview:"Dell Technologies是全球最大的IT基础设施供应商之一。",products:["AI服务器 [行业#1出货量]","企业存储 [行业#1]"],advantages:["AI服务器积压订单创历史新高","Q1财报大超预期，股价两日涨40%+"],risks:["AI服务器利润率低于传统服务器"],news:[{title:"AI服务器订单与出货预期向好，涨3.8%",summary:"AI服务器订单与出货预期向好，涨3.8%",date:"2026/6/17",pub:"Yahoo Finance",url:"https://finance.yahoo.com/quote/DELL/news/"},{title:"Dell AI服务器订单暴增750%，Q1营收大超预期，续涨10.7%",summary:"Dell Q1财报显示AI服务器收入大幅超预期，AI服务器订单同比暴增750%，上调全年营收指引。Dell Technologies World 2026大会进一步催化股价。",date:"2026/06/01",pub:"Yahoo Finance",url:"https://finance.yahoo.com/markets/stocks/articles/dell-stock-surging-another-legacy-130002137.html"}]},
+};
+
+
+// ============ COMPANY RENDER ============
+function initCompCatFilter() {
+  const cats = [...new Set(stocks.map(s => s.cat))];
+  const sel = document.getElementById('compCatFilter');
+  cats.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; sel.appendChild(o); });
+}
+
+function toggleCompanyCard(el) {
+  el.closest('.company-card').classList.toggle('open');
+}
+
+function renderCompany() {
+  const cat = document.getElementById('compCatFilter').value;
+  const q = document.getElementById('compSearch').value.toLowerCase();
+
+  const filtered = stocks.filter(s => {
+    if (cat && s.cat !== cat) return false;
+    if (q && !s.ticker.toLowerCase().includes(q) && !s.name.toLowerCase().includes(q) && !s.desc.includes(q)) return false;
+    return true;
+  });
+
+  const grid = document.getElementById('companyGrid');
+  grid.innerHTML = filtered.map(s => {
+    const p = companyProfiles[s.ticker];
+    if (!p) return '';
+    const chgClass = (s.change||'').startsWith('+') ? 'green' : (s.change||'').startsWith('-') ? 'red' : '';
+    return `<div class="company-card">
+      <div class="company-card-header" onclick="toggleCompanyCard(this)">
+        <span class="ticker-badge" style="background:${s.catColor}">${s.ticker}</span>
+        <span class="cat-label" style="background:${s.catColor}18;color:${s.catColor}">${s.cat}</span>
+        <div class="company-title">
+          <h3>${s.name} <span style="font-size:12px;color:#888;font-weight:400">${s.desc}</span></h3>
+          <div class="company-sub">$${s.price} <span class="${chgClass}" style="font-weight:600">${s.changePct}</span> · 市值 ${s.mktCap||'--'}</div>
+        </div>
+        <span class="toggle-icon">▼</span>
+      </div>
+      <div class="company-card-body">
+        <div class="profile-meta">
+          <div class="profile-meta-item"><div class="val">${p.founded}</div><div class="lbl">成立年份</div></div>
+          <div class="profile-meta-item"><div class="val">${p.hq}</div><div class="lbl">总部</div></div>
+          <div class="profile-meta-item"><div class="val">${p.employees}</div><div class="lbl">员工数</div></div>
+          <div class="profile-meta-item"><div class="val">${p.revenue||'--'}</div><div class="lbl">年营收</div></div>
+          <div class="profile-meta-item"><div class="val">$${s.price}</div><div class="lbl">最新价</div></div>
+          <div class="profile-meta-item"><div class="val">${s.pe}</div><div class="lbl">P/E</div></div>
+          <div class="profile-meta-item"><div class="val">${s.target||'--'}</div><div class="lbl">目标价</div></div>
+          <div class="profile-meta-item"><div class="val">${p.marketCap||'--'}</div><div class="lbl">市值</div></div>
+          <div class="profile-meta-item"><div class="val">${p.earningsDate||'--'}</div><div class="lbl">下次财报</div></div>
+        </div>
+        <div class="profile-section overview-section">
+          <h4><span class="icon">📋</span> 公司深度介绍</h4>
+          <ul class="overview-bullets">${p.overview.split('。').filter(x=>x.trim()).map(x=>'<li>'+x.trim()+'。</li>').join('')}</ul>
+        </div>
+        <div class="profile-section">
+          <h4><span class="icon">🔧</span> 产品线与行业地位</h4>
+          <ul class="profile-bullets blue">${p.products.map(x => '<li>' + x.replace(/\[([^\]]+)\]/g, '<span class="pos-badge">$1</span>') + '</li>').join('')}</ul>
+        </div>
+        <div class="profile-section">
+          <h4><span class="icon">💪</span> 竞争优势</h4>
+          <div class="profile-tags">${p.advantages.map(x=>'<span class="profile-tag green">'+x+'</span>').join('')}</div>
+        </div>
+        <div class="profile-section">
+          <h4><span class="icon">⚠️</span> 风险因素</h4>
+          <div class="profile-tags">${p.risks.map(x=>'<span class="profile-tag red">'+x+'</span>').join('')}</div>
+        </div>
+        ${p.news && p.news.length ? '<div class="profile-section news-section"><h4><span class="icon">📰</span> 最新新闻</h4>' + p.news.map(n => '<div class="news-item" onclick="this.classList.toggle(\'open\')"><div class="news-date">' + n.date + '</div><div class="news-body"><div class="news-title"><span class="toggle">▶</span>' + n.title + '</div><div class="news-pub">' + (n.pub || '') + (n.url ? ' · <a href="' + n.url + '" target="_blank" style="color:#3498db;font-size:10px" onclick="event.stopPropagation()">Yahoo Finance ↗</a>' : '') + '</div>' + (n.summary ? '<div class="news-summary">' + n.summary + '</div>' : '') + '</div></div>').join('') + '</div>' : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  if (!grid.innerHTML.trim()) grid.innerHTML = '<div class="empty">没有匹配的公司</div>';
+}
+
+
+// ============ SUPPLY CHAIN ============
+function renderChain() {
+  const cats = ["半导体设备与制造","AI计算芯片","AI网络芯片","存储与内存","光通信","AI服务器与数据中心","显示技术","AI能源"];
+
+  function getWeightedChg(catStocks) {
+    let totalMC = 0, weightedChg = 0;
+    catStocks.forEach(s => {
+      const mc = parseMktCap(s.mktCap||'');
+      const chg = parseFloat((s.changePct||'').replace(/[%+]/g,'')) || 0;
+      if (mc > 0) { totalMC += mc; weightedChg += mc * chg; }
+    });
+    return totalMC > 0 ? (weightedChg / totalMC).toFixed(2) : '0.00';
+  }
+  function parseMktCap(s) {
+    if (!s || s==='--') return 0;
+    s = s.replace('$','');
+    if (s.endsWith('T')) return parseFloat(s) * 1e12;
+    if (s.endsWith('B')) return parseFloat(s) * 1e9;
+    if (s.endsWith('M')) return parseFloat(s) * 1e6;
+    return 0;
+  }
+
+  cats.forEach(cat => {
+    const el = document.getElementById('chain-' + cat);
+    if (!el) return;
+    const catStocks = stocks.filter(s => s.cat === cat);
+
+    el.innerHTML = catStocks.map(s => {
+      const chgClass = (s.change||'').startsWith('+') ? 'green' : (s.change||'').startsWith('-') ? 'red' : '';
+      return `<div class="chain-stock">
+        <span class="cs-ticker">${s.ticker}</span>
+        <span class="cs-name">${s.name}</span>
+        <span class="cs-desc">${s.desc}</span>
+        <span class="cs-price">$${s.price}</span>
+        <span class="cs-chg ${chgClass}">${s.changePct}</span>
+        <span class="cs-mc" style="font-size:10px;color:#1565C0;font-weight:600">${s.mktCap||''}</span>
+      </div>`;
+    }).join('');
+  });
+
+  const flow = document.getElementById('chainFlow');
+  const flowLayers = [
+    {label:"上 游", items:[{name:"设备与制造", color:"#784212", cats:["半导体设备与制造"], desc:"光刻机·刻蚀·沉积·检测·晶圆代工，为芯片制造提供核心设备与工艺"}]},
+    {label:"中 游", items:[
+      {name:"计算芯片", color:"#D32F2F", cats:["AI计算芯片"], desc:"GPU·AI加速器·FPGA·CPU，AI训练与推理的算力核心"},
+      {name:"网络芯片", color:"#1565C0", cats:["AI网络芯片"], desc:"DPU·交换芯片·SerDes·以太网控制器，数据中心高速互联"},
+      {name:"光通信", color:"#00695C", cats:["光通信"], desc:"光模块·光纤·硅光芯片·相干光器件，800G/1.6T高速传输"},
+      {name:"存储与内存", color:"#4A148C", cats:["存储与内存"], desc:"HBM·DDR5·NAND·SSD控制器，AI大模型的数据吞吐保障"},
+      {name:"显示技术", color:"#880E4F", cats:["显示技术"], desc:"Micro LED·AR/VR光学·LCOS·显示驱动IC，AI终端交互界面"},
+    ]},
+    {label:"下 游", items:[{name:"算力交付", color:"#154360", cats:["AI服务器与数据中心"], desc:"AI服务器·GPU集群·液冷散热·机柜，将算力打包交付给客户"}]},
+    {label:"能源底座", items:[{name:"能源支撑", color:"#196F3D", cats:["AI能源"], desc:"核能SMR·天然气发电·燃料电池·稀土材料，数据中心持续供电保障"}]},
+  ];
+
+  const allWChg = getWeightedChg(stocks);
+  const allSign = parseFloat(allWChg) > 0 ? '+' : '';
+  const allClass = parseFloat(allWChg) > 0 ? 'green' : parseFloat(allWChg) < 0 ? 'red' : '';
+
+  let flowHTML = '<div class="flow-pyramid">';
+  flowHTML += `<div class="flow-pyramid-title">AI 产业链全景 · 市值加权 <span class="${allClass}" style="font-size:14px">${allSign}${allWChg}%</span></div>`;
+
+  flowLayers.forEach((layer, li) => {
+    flowHTML += `<div class="flow-layer-label">${layer.label}</div>`;
+    flowHTML += '<div class="flow-layer">';
+    layer.items.forEach(item => {
+      const catStocks = stocks.filter(s => item.cats.includes(s.cat));
+      const wChg = getWeightedChg(catStocks);
+      const wSign = parseFloat(wChg) > 0 ? '+' : '';
+      const wClass = parseFloat(wChg) > 0 ? 'green' : parseFloat(wChg) < 0 ? 'red' : '';
+      const cnt = catStocks.length;
+      const flexStyle = layer.items.length > 1 ? 'flex:1;min-width:130px' : 'flex:0 1 320px';
+      flowHTML += `<div class="flow-box" style="${flexStyle};border-top-color:${item.color}">
+        <div class="fb-name" style="color:${item.color}">${item.name}</div>
+        <div style="font-size:10px;color:#888;margin:4px 0 6px;line-height:1.4">${item.desc}</div>
+        <div class="fb-count" style="color:${item.color}">${cnt}<span style="font-size:11px;font-weight:400;color:#999"> 只</span></div>
+        <div class="fb-chg ${wClass}">${wSign}${wChg}%</div>
+        <div class="fb-label">市值加权涨跌</div>
+      </div>`;
+    });
+    flowHTML += '</div>';
+    if (li < flowLayers.length - 1) {
+      flowHTML += '<div class="flow-arrow-row">▼ ▼ ▼</div>';
+    }
+  });
+
+  flowHTML += '</div>';
+  flow.innerHTML = flowHTML;
+}
+
+// ============ CHANGELOG ============
+const updateLogs = [
+  {
+    date: "2026-06-18",
+    weekday: "周四",
+    source: "TradingView + Yahoo Finance",
+    priceUpdated: 47,
+    newsUpdated: ["MU","SNDK","BE","LEU","ALAB","GLW","INTC","CRDO","KLAC","RMBS","PLAB","NVTS","MRVL","WDC","AVGO","AMD","AXTI","IBM","AAOI"],
+    topGainers: [{ticker:"BE",change:"+15.41%"},{ticker:"LEU",change:"+12.38%"},{ticker:"SNDK",change:"+11.54%"},{ticker:"ALAB",change:"+11.31%"},{ticker:"GLW",change:"+11.13%"}],
+    topLosers: [{ticker:"AXTI",change:"-8.19%"},{ticker:"IBM",change:"-5.05%"},{ticker:"AAOI",change:"-3.28%"},{ticker:"ALMU",change:"-2.70%"},{ticker:"DELL",change:"-2.34%"}],
+    newsItems: [
+      {ticker:"MU",date:"6/18",title:"多家投行大幅上调目标价(花旗$1200、TD Cowen $1500、RBC $1200)，内存价格Q3预计环比涨30-40%，6/24 Q3财报临近，涨8.7%",url:"https://finance.yahoo.com/quote/MU/news/"},
+      {ticker:"SNDK",date:"6/18",title:"摩根士丹利看多多年期存储上行周期，与BofA上调目标价至$1750-$2100，HBF高带宽闪存新品研发推进，创历史新高大涨11.5%",url:"https://finance.yahoo.com/quote/SNDK/news/"},
+      {ticker:"BE",date:"6/18",title:"AI数据中心电力需求叙事强化，$50亿Brookfield AI合作叠加Daiwa/UBS上调目标价至高$260-低$320区间，FY26营收指引$34-38亿，居关注列表涨幅榜首大涨15.4%",url:"https://finance.yahoo.com/quote/BE/news/"},
+      {ticker:"LEU",date:"6/18",title:"核燃料供应链与能源安全政策关注升温，$39亿订单积压至2040年、Piketon铀浓缩扩产，大涨12.4%",url:"https://finance.yahoo.com/quote/LEU/news/"},
+      {ticker:"ALAB",date:"6/18",title:"6/22正式纳入Nasdaq-100指数在即，被动资金配置预期叠加AI基础设施需求强劲(Q1营收创纪录$3.08亿)，创历史新高大涨11.3%",url:"https://finance.yahoo.com/quote/ALAB/news/"},
+      {ticker:"GLW",date:"6/18",title:"亚马逊宣布数十亿美元多年期光纤供应协议供其美国数据中心，继Meta、英伟达后再添AI基建大单，大涨11.1%",url:"https://finance.yahoo.com/quote/GLW/news/"},
+      {ticker:"INTC",date:"6/18",title:"谷歌、英伟达据报选定Intel为先进制程备用代工厂(TSMC产能紧张)，18A-P节点按期进入风险量产，BofA维持买入目标价$135，大涨10.6%",url:"https://finance.yahoo.com/quote/INTC/news/"},
+      {ticker:"CRDO",date:"6/18",title:"AI数据中心高速互连(AEC有源以太网电缆)需求强劲，板块情绪修复带动，涨9.0%",url:"https://finance.yahoo.com/quote/CRDO/news/"},
+      {ticker:"KLAC",date:"6/18",title:"10:1拆股后延续强势，先进封装与工艺控制设备需求旺盛，JPMorgan看好2030年盈利增至三倍，涨8.7%",url:"https://finance.yahoo.com/quote/KLAC/news/"},
+      {ticker:"RMBS",date:"6/18",title:"内存超级周期叙事外溢，DDR5接口芯片需求强劲(市占率超90%)，涨8.5%",url:"https://finance.yahoo.com/quote/RMBS/news/"},
+      {ticker:"PLAB",date:"6/18",title:"半导体板块全线反弹，光掩膜寡头需求受益于AI芯片产能扩张，涨8.4%",url:"https://finance.yahoo.com/quote/PLAB/news/"},
+      {ticker:"NVTS",date:"6/18",title:"GaN功率芯片受AI数据中心800V供电叙事提振，自前期回调中反弹，涨7.5%",url:"https://finance.yahoo.com/quote/NVTS/news/"},
+      {ticker:"MRVL",date:"6/18",title:"定制AI芯片需求叙事回暖，6/22正式纳入S&P 500在即带来被动配置资金，涨7.3%",url:"https://finance.yahoo.com/quote/MRVL/news/"},
+      {ticker:"WDC",date:"6/18",title:"AI-HDD超级周期延续、毛利率突破50%，大行上调目标价至中$600区间，再创历史新高涨4.8%",url:"https://finance.yahoo.com/quote/WDC/news/"},
+      {ticker:"AVGO",date:"6/18",title:"半导体板块全线反弹，定制ASIC与AI网络需求支撑，涨4.7%",url:"https://finance.yahoo.com/quote/AVGO/news/"},
+      {ticker:"AMD",date:"6/18",title:"AI GPU需求叙事强劲，板块普涨带动，涨4.9%",url:"https://finance.yahoo.com/quote/AMD/news/"},
+      {ticker:"AXTI",date:"6/18",title:"拟将授权普通股本提高(7000万→1.2亿股)引发稀释担忧，叠加中国出口许可时点不确定，自历史高位继续回落，领跌关注列表跌8.2%",url:"https://finance.yahoo.com/quote/AXTI/news/"},
+      {ticker:"IBM",date:"6/18",title:"Accenture下调全年营收指引引发IT服务板块抛售，叠加企业AI依赖度担忧与美联储鹰派点阵图，跌5.1%",url:"https://finance.yahoo.com/quote/IBM/news/"},
+      {ticker:"AAOI",date:"6/18",title:"共封装光学(CPO)出货或延迟的报告叠加前期大涨获利回吐，跌3.3%",url:"https://finance.yahoo.com/quote/AAOI/news/"}
+    ],
+    notes: "AI半导体全线反弹，关注列表47只中39涨8跌。存储与内存领涨：MU+8.7%(花旗/TD Cowen/RBC齐上调目标价、6/24 Q3财报临近)、SNDK+11.5%(摩根士丹利看多多年期存储上行+HBF新品)、RMBS+8.5%、DRAM ETF+9.7%。AI电力链强势：BE+15.4%居首(Brookfield $50亿AI合作)、LEU+12.4%(核燃料)、GEV+5.8%。Intel+10.6%受谷歌/英伟达代工备选与18A-P量产提振；GLW+11.1%获亚马逊光纤大单；ALAB+11.3%、MRVL+7.3%分别将于6/22纳入Nasdaq-100与S&P 500。下跌集中在稀释与轮动：AXTI-8.2%(增发稀释+出口许可不确定)、IBM-5.1%(Accenture拖累IT服务+AI依赖担忧)、AAOI-3.3%(CPO延迟担忧)。MU 6/24 Q3财报为下一关键催化。"
+  },
+
+  {
+    date: "2026-06-17",
+    weekday: "周三",
+    source: "TradingView + Yahoo Finance",
+    priceUpdated: 47,
+    newsUpdated: ["SIMO","GEV","MP","VRT","NBIS","WDC","AVGO","CRDO","DELL","MU","SMTC","SMCI","IBM","GSIT","POET"],
+    topGainers: [{ticker:"SIMO",change:"+8.65%"},{ticker:"GEV",change:"+6.77%"},{ticker:"MP",change:"+6.64%"},{ticker:"VRT",change:"+6.00%"},{ticker:"NBIS",change:"+5.96%"}],
+    topLosers: [{ticker:"SMTC",change:"-7.05%"},{ticker:"POET",change:"-5.50%"},{ticker:"SMCI",change:"-4.93%"},{ticker:"IBM",change:"-3.12%"},{ticker:"GSIT",change:"-3.05%"}],
+    newsItems: [
+      {ticker:"SIMO",date:"6/17",title:"AI存储需求叙事升温，NAND供应趋紧叠加SM2524XT PCIe Gen5 DRAM-less控制器新品提振，逆势大涨8.7%；分析师中值目标价$230",url:"https://finance.yahoo.com/quote/SIMO/news/"},
+      {ticker:"GEV",date:"6/17",title:"AI数据中心电力需求强劲，公司将2026营收指引上调至$445-455亿、调整后EBITDA利润率升至12-14%，电气化订单创纪录，涨6.8%",url:"https://finance.yahoo.com/quote/GEV/news/"},
+      {ticker:"MP",date:"6/17",title:"G7承诺2030年前将稀土对集团外供应商依赖降至60%以下，叠加五角大楼支持$5亿Phoenix Tailings贷款，大涨6.6%；分析师评级强力买入、目标价$80",url:"https://finance.yahoo.com/quote/MP/news/"},
+      {ticker:"VRT",date:"6/17",title:"AI数据中心散热与供电需求叙事升温，叠加并购消息推动深耕先进热管理，涨6.0%；Bernstein 6/9给予跑赢大盘、目标价$416",url:"https://finance.yahoo.com/quote/VRT/news/"},
+      {ticker:"NBIS",date:"6/17",title:"完成对Eigen AI的收购、强化推理与模型优化能力，叠加6/22纳入Nasdaq-100在即，涨6.0%；BofA目标价$280维持买入",url:"https://finance.yahoo.com/quote/NBIS/news/"},
+      {ticker:"WDC",date:"6/17",title:"AI驱动HDD超级周期延续、毛利率突破50%，继续创历史新高涨4.6%",url:"https://finance.yahoo.com/quote/WDC/news/"},
+      {ticker:"AVGO",date:"6/17",title:"半导体板块情绪修复，定制ASIC与AI网络需求支撑，反弹4.3%",url:"https://finance.yahoo.com/quote/AVGO/news/"},
+      {ticker:"CRDO",date:"6/17",title:"AI高速互连需求强劲，前期技术性回调后反弹4.2%",url:"https://finance.yahoo.com/quote/CRDO/news/"},
+      {ticker:"DELL",date:"6/17",title:"AI服务器订单与出货预期向好，涨3.8%",url:"https://finance.yahoo.com/quote/DELL/news/"},
+      {ticker:"MU",date:"6/17",title:"AI存储超级周期叙事延续，6/24 Q3财报临近，涨2.2%",url:"https://finance.yahoo.com/quote/MU/news/"},
+      {ticker:"SMTC",date:"6/17",title:"前期大涨后估值担忧(约55倍前瞻PE)引发获利回吐，跌7.0%",url:"https://finance.yahoo.com/quote/SMTC/news/"},
+      {ticker:"SMCI",date:"6/17",title:"约$70亿股权及股权挂钩融资稀释担忧持续发酵，周内累计跌约28%后再跌4.9%",url:"https://finance.yahoo.com/quote/SMCI/news/"},
+      {ticker:"IBM",date:"6/17",title:"前期反弹后获利回吐跌3.1%；分析师目标价约$297维持买入，量子代工与软件业务长线看好",url:"https://finance.yahoo.com/quote/IBM/news/"},
+      {ticker:"GSIT",date:"6/17",title:"小盘股流动性偏弱叠加板块轮动，跌3.1%",url:"https://finance.yahoo.com/quote/GSIT/news/"},
+      {ticker:"POET",date:"6/17",title:"光通信板块波动延续，前期$4亿注册直接发行稀释继续消化，跌5.5%",url:"https://finance.yahoo.com/quote/POET/news/"}
+    ],
+    notes: "半导体与AI产业链情绪明显回暖：关注列表47只中28涨18跌1平，反弹集中在存储、电力与稀土。存储领涨SIMO(+8.7%，AI存储+新品控制器)；电力/资源走强GEV(+6.8%，上调2026指引)、MP(+6.6%，G7降低稀土对外依赖+五角大楼贷款)；数据中心硬件VRT(+6.0%)、NBIS(+6.0%，完成Eigen AI收购+将纳入Nasdaq-100)、DELL(+3.8%)、WDC(+4.6%创新高)。回调集中在前期涨幅过大与稀释事件：SMTC(-7.0%，估值担忧)、POET(-5.5%，光通信波动+融资稀释)、SMCI(-4.9%，$70亿融资稀释)、IBM(-3.1%)、GSIT(-3.1%)。MU 6/24 Q3财报临近。"
+  },
+
+  {
+    date: "2026-06-16",
+    weekday: "周二",
+    source: "TradingView + Yahoo Finance",
+    priceUpdated: 47,
+    newsUpdated: ["AXTI","AAOI","MRVL","POET","LITE","INTC","AMD","COHR","KLAC","MU","AVGO","NVDA","WDC","VST","BE","NBIS"],
+    topGainers: [{ticker:"WDC",change:"+4.22%"},{ticker:"VST",change:"+3.32%"},{ticker:"BE",change:"+2.32%"},{ticker:"SIMO",change:"+2.27%"},{ticker:"NBIS",change:"+1.93%"}],
+    topLosers: [{ticker:"AXTI",change:"-15.98%"},{ticker:"AAOI",change:"-10.83%"},{ticker:"MRVL",change:"-9.78%"},{ticker:"POET",change:"-9.22%"},{ticker:"LITE",change:"-8.55%"}],
+    newsItems: [
+      {ticker:"AXTI",date:"6/15",title:"增发授权股本稀释担忧+获利回吐，自历史高位重挫16.0%(年内仍涨约368%)",url:"https://finance.yahoo.com/quote/AXTI/"},
+      {ticker:"AAOI",date:"6/15",title:"共封装光学(CPO)出货或延迟报告+板块抛售，跌10.8%",url:"https://finance.yahoo.com/quote/AAOI/"},
+      {ticker:"MRVL",date:"6/15",title:"AI芯片需求转弱担忧+CFO离任，跌9.8%；6/22纳入S&P 500在即",url:"https://finance.yahoo.com/quote/MRVL/"},
+      {ticker:"AVGO",date:"6/15",title:"被指为本轮半导体抛售导火索(Q2财报后AI前景指引保守)，跌4.4%",url:"https://finance.yahoo.com/quote/AVGO/"},
+      {ticker:"MU",date:"6/15",title:"随板块回调6.2%，AI存储超级周期叙事仍在，6/24 Q3财报临近",url:"https://finance.yahoo.com/quote/MU/"},
+      {ticker:"WDC",date:"6/15",title:"逆势新高：MS/JPM上调AI-HDD目标价至中$600，涨4.2%创历史新高",url:"https://finance.yahoo.com/quote/WDC/"},
+      {ticker:"VST",date:"6/15",title:"AI数据中心电力需求叙事支撑，逆势涨3.3%(分析师中值目标$232)",url:"https://finance.yahoo.com/quote/VST/"},
+      {ticker:"BE",date:"6/15",title:"AI数据中心供电需求(Oracle合作)支撑，逆势涨2.3%",url:"https://finance.yahoo.com/quote/BE/"},
+      {ticker:"NBIS",date:"6/15",title:"Nasdaq-100纳入(6/22生效)被动配置需求，逆势涨1.9%",url:"https://finance.yahoo.com/quote/NBIS/"},
+      {ticker:"NVDA",date:"6/15",title:"AI需求可持续性担忧+CPI压力，龙头跟跌2.4%",url:"https://finance.yahoo.com/quote/NVDA/"}
+    ],
+    notes: "AI半导体延续抛售：费城半导体指数大幅走低，导火索为Broadcom财报后保守的AI前景指引，叠加CPI偏热的利率担忧、前期巨幅涨幅后的获利回吐及内存/智能手机需求疑虑。关注列表47只中38跌9涨。光通信/化合物半导体领跌：AXTI(-16.0%，增发授权稀释)、AAOI(-10.8%，CPO出货或延迟)、MRVL(-9.8%，需求担忧+CFO离任)、POET(-9.2%)、LITE(-8.6%)。逆势上涨集中在存储与电力：WDC(+4.2%创历史新高，MS/JPM上调AI-HDD目标价)、VST(+3.3%)、BE(+2.3%)、SIMO(+2.3%)、NBIS(+1.9%)。"
+  },
+
+  {
+    date: "2026-06-15",
+    weekday: "周一",
+    source: "TradingView + Yahoo Finance",
+    priceUpdated: 47,
+    newsUpdated: ["WDC","AXTI","AAOI","NBIS","MU","MRVL","STX","LEU","AMD","COHR","NVDA"],
+    topGainers: [{ticker:"WDC",change:"+16.09%"},{ticker:"MRAM",change:"+14.09%"},{ticker:"AXTI",change:"+13.95%"},{ticker:"AAOI",change:"+13.31%"},{ticker:"NBIS",change:"+11.93%"}],
+    topLosers: [{ticker:"RMBS",change:"-2.23%"},{ticker:"SIMO",change:"-1.46%"},{ticker:"IBM",change:"-1.30%"},{ticker:"ALMU",change:"-1.07%"},{ticker:"KLAC",change:"+0.74%"}],
+    newsItems: [
+      {ticker:"WDC",date:"6/15",title:"AI存储需求+JPMorgan目标价升至$650、Mizuho/Citi升至$685，大涨16.1%创历史新高",url:"https://finance.yahoo.com/quote/WDC/"},
+      {ticker:"AXTI",date:"6/15",title:"磷化铟供应紧张+AI光通信需求+空头回补，盘中破$110，再涨14.0%",url:"https://finance.yahoo.com/quote/AXTI/"},
+      {ticker:"AAOI",date:"6/15",title:"与Spectrum扩大QuantumLink软件部署+800G/1.6T放量，大涨13.3%",url:"https://finance.yahoo.com/quote/AAOI/"},
+      {ticker:"NBIS",date:"6/15",title:"Nasdaq-100纳入(6/22生效)被动配置需求+Q1营收增6.8倍，涨11.9%",url:"https://finance.yahoo.com/quote/NBIS/"},
+      {ticker:"MU",date:"6/15",title:"HBM4 36GB为NVIDIA Vera Rubin批量出货、2026产能售罄，大涨10.8%，6/24财报临近",url:"https://finance.yahoo.com/quote/MU/"},
+      {ticker:"MRVL",date:"6/15",title:"新任CFO Dan Durn 6/15上任重申Q2指引、6/22纳入S&P 500，涨10.4%",url:"https://finance.yahoo.com/quote/MRVL/"},
+      {ticker:"STX",date:"6/15",title:"AI存储需求延续、HDD双寡头地位强化，涨9.4%",url:"https://finance.yahoo.com/quote/STX/"},
+      {ticker:"LEU",date:"6/15",title:"浓缩铀供应紧张(现货破$100/磅)+HALEU美国唯一产能，涨8.7%",url:"https://finance.yahoo.com/quote/LEU/"},
+      {ticker:"AMD",date:"6/15",title:"收购AI内存优化公司MEXT+Citi上调至买入目标价$575，大涨7.0%",url:"https://finance.yahoo.com/quote/AMD/"},
+      {ticker:"COHR",date:"6/15",title:"AI光互连需求延续+JPMorgan重申增持目标价$380，涨7.5%",url:"https://finance.yahoo.com/quote/COHR/"}
+    ],
+    notes: "美伊达成和平协议提振风险偏好，叠加AMD收购AI内存公司MEXT并获Citi上调至买入(目标价$575)，AI芯片与产业链全面普涨：关注列表47只中43涨4跌。存储/光通信/封装领涨：WDC(+16.1%，JPM/Mizuho/Citi上调目标价)、MRAM(+14.1%)、AXTI(+14.0%)、AAOI(+13.3%，Spectrum软件合作)、NBIS(+11.9%，Nasdaq-100纳入)、MU(+10.8%，HBM4为Vera Rubin出货)、MRVL(+10.4%，新CFO上任+纳入S&P 500)。仅RMBS/SIMO/IBM/ALMU小幅回调。"
+  },
+  {
+    date: "2026-06-12",
+    weekday: "周五",
+    source: "TradingView + Yahoo Finance",
+    priceUpdated: 47,
+    newsUpdated: ["POET","AXTI","AMKR","STX","WDC","INTC","ALAB","NBIS","COHR","CRDO","KLAC"],
+    topGainers: [{ticker:"POET",change:"+11.38%"},{ticker:"AXTI",change:"+10.01%"},{ticker:"AMKR",change:"+8.71%"},{ticker:"STX",change:"+7.25%"},{ticker:"INTC",change:"+6.51%"}],
+    topLosers: [{ticker:"CRDO",change:"-5.27%"},{ticker:"SMCI",change:"-4.72%"},{ticker:"LWLG",change:"-4.48%"},{ticker:"KOPN",change:"-3.70%"},{ticker:"AAOI",change:"-2.16%"}],
+    newsItems: [
+      {ticker:"POET",date:"6/12",title:"Lumilens战略合作$5000万首单(五年可超$5亿)+$4亿融资落地，大涨11.4%",url:"https://finance.yahoo.com/quote/POET/"},
+      {ticker:"AXTI",date:"6/12",title:"InP短缺叙事+空头回补延续，再涨10.0%创新高，一年涨超5100%",url:"https://finance.yahoo.com/quote/AXTI/"},
+      {ticker:"AMKR",date:"6/12",title:"先进封装需求+亚利桑那园区进展，大涨8.7%创52周新高",url:"https://finance.yahoo.com/quote/AMKR/"},
+      {ticker:"STX",date:"6/12",title:"2026年HDD产能全部售罄，大涨7.3%，52周涨近700%",url:"https://finance.yahoo.com/quote/STX/"},
+      {ticker:"WDC",date:"6/12",title:"毛利率首破50%，街内最高目标价$685，涨6.4%创52周新高",url:"https://finance.yahoo.com/quote/WDC/"},
+      {ticker:"INTC",date:"6/12",title:"BofA双级上调后买盘延续，再涨6.5%，两日累计涨约16%",url:"https://finance.yahoo.com/quote/INTC/"},
+      {ticker:"ALAB",date:"6/12",title:"6月22日纳入Nasdaq-100(与CRWV、NBIS、RKLB、TER同批)",url:"https://finance.yahoo.com/quote/ALAB/"},
+      {ticker:"NBIS",date:"6/12",title:"获纳入Nasdaq-100指数，涨4.6%",url:"https://finance.yahoo.com/quote/NBIS/"},
+      {ticker:"COHR",date:"6/12",title:"光通信涨势延续涨5.9%，数据中心业务占营收75%",url:"https://finance.yahoo.com/quote/COHR/"},
+      {ticker:"CRDO",date:"6/12",title:"6/11创历史新高$268.18后技术性回调5.3%",url:"https://finance.yahoo.com/quote/CRDO/"},
+      {ticker:"KLAC",date:"6/12",title:"10:1拆股生效，价格/EPS/目标价均按拆股后口径，涨5.5%",url:"https://finance.yahoo.com/quote/KLAC/"}
+    ],
+    notes: "SpaceX史上最大IPO首日大涨近20%提振风险偏好，AI产业链延续涨势：关注列表47只中35涨12跌。光通信/封装/存储领涨：POET(+11.4%，Lumilens $5000万首单+$4亿融资)、AXTI(+10.0%)、AMKR(+8.7%)、STX(+7.3%，HDD产能售罄)、WDC(+6.4%，毛利率首破50%)；INTC获BofA上调后再涨6.5%。ALAB/NBIS宣布6/22纳入Nasdaq-100。CRDO(-5.3%)创新高后技术性回调，SMCI(-4.7%)增发余波未平。KLAC 10:1拆股今日生效。"
+  },
+
+  {
+    date: "2026-06-11",
+    weekday: "周四",
+    source: "TradingView + Yahoo Finance",
+    priceUpdated: 47,
+    newsUpdated: ["SNDK","KLAC","MU","MRVL","CRDO","IREN","INTC","SMCI","AMD","VST","NVDA"],
+    topGainers: [{ticker:"SNDK",change:"+14.50%"},{ticker:"DRAM",change:"+13.51%"},{ticker:"KLAC",change:"+12.92%"},{ticker:"MU",change:"+11.66%"},{ticker:"KOPN",change:"+11.52%"}],
+    topLosers: [{ticker:"AAOI",change:"-1.34%"},{ticker:"IBM",change:"+0.91%"},{ticker:"NVDA",change:"+2.22%"},{ticker:"CIEN",change:"+2.43%"},{ticker:"COHR",change:"+2.48%"}],
+    newsItems: [
+      {ticker:"SNDK",date:"6/11",title:"Morgan Stanley看多AI存储超级周期，多家投行目标价升至$2100-3250，大涨14.5%创新高",url:"https://finance.yahoo.com/quote/SNDK/"},
+      {ticker:"KLAC",date:"6/11",title:"JPMorgan称2030年盈利有望增至三倍，10:1拆股6月12日生效，大涨12.9%",url:"https://finance.yahoo.com/quote/KLAC/"},
+      {ticker:"MU",date:"6/11",title:"大涨11.7%市值首破$1.1万亿，Susquehanna目标价升至$1750，6月24日财报临近",url:"https://finance.yahoo.com/quote/MU/"},
+      {ticker:"MRVL",date:"6/11",title:"6月22日正式纳入S&P 500，FY2027营收指引上调至$110亿，大涨11.1%",url:"https://finance.yahoo.com/markets/stocks/articles/marvell-stock-pops-p-500-221524366.html"},
+      {ticker:"CRDO",date:"6/11",title:"FY2026营收$13亿同比增逾三倍、Q4创纪录，涨11.4%",url:"https://finance.yahoo.com/quote/CRDO/"},
+      {ticker:"IREN",date:"6/11",title:"南澳800MW数据中心园区+$36.5亿投资级GPU融资，涨10.1%",url:"https://finance.yahoo.com/quote/IREN/"},
+      {ticker:"INTC",date:"6/11",title:"BofA双级上调至买入、目标价$135，看好服务器CPU与代工，大涨9.3%",url:"https://finance.yahoo.com/markets/stocks/articles/intel-rallies-bofa-double-upgrades-105400178.html"},
+      {ticker:"SMCI",date:"6/11",title:"跌入历史支撑区后反弹9.2%，该区间历史平均最高反弹近58%",url:"https://finance.yahoo.com/quote/SMCI/"},
+      {ticker:"AMD",date:"6/11",title:"Oracle强劲AI资本开支前景+伊朗局势缓和，大涨8.0%",url:"https://finance.yahoo.com/quote/AMD/"},
+      {ticker:"VST",date:"6/11",title:"作为首选电力供应商参与KKR $100亿AI基建公司Helix，涨5.7%",url:"https://finance.yahoo.com/quote/VST/"},
+      {ticker:"NVDA",date:"6/11",title:"携手KKR、KIA、Vistra发起$100亿AI基建公司Helix，涨2.2%",url:"https://finance.yahoo.com/quote/NVDA/"}
+    ],
+    notes: "美伊紧张缓和(特朗普取消对伊打击)+Oracle强劲AI资本开支指引引爆全面反弹：费城半导体指数大涨7.9%创2025年4月以来最大单日涨幅，关注列表47只中46涨1跌。存储链领涨：SNDK(+14.5%)、DRAM(+13.5%)、KLAC(+12.9%)、MU(+11.7%，市值破$1.1万亿)；INTC获BofA双级上调大涨9.3%。唯一下跌AAOI(-1.3%)受CPO延迟报告余波拖累。"
+  },
+
+  {
+    date: "2026-06-10",
+    weekday: "周三",
+    source: "TradingView + Yahoo Finance",
+    priceUpdated: 47,
+    newsUpdated: ["SMCI","HIMX","NVTS","BE","APLD","AXTI","AAOI","LITE","GEV","NVDA","MU"],
+    topGainers: [{ticker:"AXTI",change:"+8.84%"},{ticker:"AAOI",change:"+7.52%"},{ticker:"LITE",change:"+3.83%"},{ticker:"POET",change:"+1.90%"},{ticker:"CRDO",change:"+1.43%"}],
+    topLosers: [{ticker:"SMCI",change:"-27.98%"},{ticker:"HIMX",change:"-11.17%"},{ticker:"NVTS",change:"-10.28%"},{ticker:"BE",change:"-9.78%"},{ticker:"APLD",change:"-7.13%"}],
+    newsItems: [
+      {ticker:"SMCI",date:"6/10",title:"拟增发约$70亿股权及股权挂钩融资履行$390亿AI服务器订单，稀释担忧致收盘暴跌约28%",url:"https://finance.yahoo.com/markets/stocks/articles/super-micro-sinks-13-7-142722341.html"},
+      {ticker:"HIMX",date:"6/10",title:"虽给出Q2营收环比增10-13%的强劲指引，但CPI偏热日中小盘半导体普跌，回吐前期涨幅跌11.2%",url:"https://finance.yahoo.com/quote/HIMX/"},
+      {ticker:"NVTS",date:"6/10",title:"6月4日增发328万股稀释+董事Ranbir Singh辞职，较NVIDIA 800V合作所创52周高点回落跌10.3%",url:"https://www.investing.com/news/stock-market-news/why-is-navitas-semiconductor-stock-sliding-today-93CH-4728855"},
+      {ticker:"BE",date:"6/10",title:"CPI偏热致燃料电池股回调9.8%，管理层称扩产可六个月自筹回本、无需增发",url:"https://finance.yahoo.com/markets/stocks/articles/bloom-energy-valuation-check-ai-100811836.html"},
+      {ticker:"APLD",date:"6/10",title:"第三份15年期租约锁定约$52亿合约收入(总积压$360亿)，但6月获利回吐跌7.1%",url:"https://www.tipranks.com/news/why-is-applied-digital-stock-apld-soaring-today-june-9-2026"},
+      {ticker:"AXTI",date:"6/10",title:"InP磷化铟AI需求爆发，年初至今涨超650%，逆势大涨8.8%创历史新高",url:"https://finance.yahoo.com/markets/stocks/articles/axti-surges-more-650-ytd-181600813.html"},
+      {ticker:"AAOI",date:"6/10",title:"锁定超$3.24亿 800G/1.6T订单，Rosenblatt目标价上调至$220，逆势涨7.5%",url:"https://finance.yahoo.com/quote/AAOI/news/"},
+      {ticker:"LITE",date:"6/10",title:"NVIDIA $20亿投资+光互连转向，OCS积压超$4亿，逆势涨3.8%",url:"https://finance.yahoo.com/markets/stocks/articles/nvidia-optics-shift-puts-lumentum-061120526.html"},
+      {ticker:"GEV",date:"6/10",title:"Q1数据中心电气化订单$24亿创纪录、总积压$1630亿，CPI日能源股普跌5.8%",url:"https://finance.yahoo.com/markets/stocks/articles/ge-vernova-gev-power-ai-171216454.html"},
+      {ticker:"NVDA",date:"6/09",title:"拿下苹果AI大客户、市值逼近$5万亿，Dan Loeb称仍被低估",url:"https://finance.yahoo.com/quote/NVDA/"},
+      {ticker:"MU",date:"6/08",title:"HBM 2026产能售罄、DRAM均价环比涨60%+，6月24日财报临近",url:"https://finance.yahoo.com/quote/MU/"}
+    ],
+    notes: "收盘最终数据：CPI偏热引发AI/半导体板块全面回调，关注列表47只中42跌5涨。最惨SMCI因拟增发$70亿股权融资履行$390亿订单、稀释担忧收盘暴跌约28%；HIMX、NVTS、BE、APLD等中小盘领跌。能源/电力股GEV、VST、BE、LEU随降息预期降温而回调。逆势上涨的仍是AI光通信链：AXTI(+8.8%)、AAOI(+7.5%)、LITE(+3.8%)受NVIDIA光互连投资及800G/InP需求催化。"
+  },
+  {
+    date: "2026-06-04",
+    weekday: "周四",
+    source: "TradingView + Yahoo Finance",
+    priceUpdated: 47,
+    newsUpdated: ["AVGO","CIEN","MU","CLS","AAOI"],
+    topGainers: [{ticker:"AAOI",change:"+10.22%"}, {ticker:"MRVL",change:"+4.90%"}, {ticker:"SMTC",change:"+3.58%"}, {ticker:"KOPN",change:"+3.23%"}, {ticker:"NBIS",change:"+3.17%"}],
+    topLosers: [{ticker:"CIEN",change:"-13.66%"}, {ticker:"AVGO",change:"-12.59%"}, {ticker:"MU",change:"-7.74%"}, {ticker:"CLS",change:"-7.16%"}, {ticker:"DRAM",change:"-5.75%"}],
+    newsItems: [
+      {ticker:"AVGO",date:"6/03",title:"Q2营收$222亿+48%，AI半导体$108亿暴增143%，但CEO未上调全年$100亿AI目标，股价暴跌约12.6%",url:"https://www.cnbc.com/2026/06/03/broadcom-avgo-earnings-report-q2-2026.html"},
+      {ticker:"CIEN",date:"6/04",title:"Q2营收$15.7亿+40%，EPS $1.64超预期并上调FY26指引至$63亿，'卖事实'股价大跌13.7%",url:"https://finance.yahoo.com/quote/CIEN/"},
+      {ticker:"MU",date:"6/04",title:"破$1万亿市值创新高后获利回吐跌7.7%，HBM产能售罄至2026年底",url:"https://finance.yahoo.com/quote/MU/"},
+      {ticker:"CLS",date:"6/04",title:"Alphabet $800亿资本开支带来$100-160亿CCS增量机会，高估值回调跌7.2%",url:"https://finance.yahoo.com/quote/CLS/"},
+      {ticker:"AAOI",date:"6/04",title:"Rosenblatt上调目标价至$220，800G(亚马逊)订单+Oracle认证推进，年初至今涨439%",url:"https://finance.yahoo.com/markets/stocks/articles/applied-optoelectronics-439-2026-outperforming-191547192.html"}
+    ],
+    notes: "AVGO Q2财报'买预期卖事实'：营收+48%、AI芯片+143%均强劲，但因CEO未上调2026年$100亿AI目标，股价暴跌约12.6%拖累光/网络板块；CIEN虽超预期并上调指引仍大跌13.7%。47只中16涨31跌0平，AAOI(+10.2%)逆势领涨，光通信与存储普遍回调。"
+  },
+  {
+    date: "2026-06-02",
+    weekday: "周二",
+    source: "TradingView + WebSearch",
+    priceUpdated: 47,
+    newsUpdated: ["MRVL","COHR","LITE","GLW","LWLG","AVGO","BE","CLS","CIEN","SMTC","ALAB","AAOI","HIMX","DELL","CRDO","NBIS","SMCI","NVDA"],
+    topGainers: [{ticker:"MRVL",change:"+32.52%"},{ticker:"COHR",change:"+17.63%"},{ticker:"LWLG",change:"+15.43%"},{ticker:"LITE",change:"+13.72%"},{ticker:"GLW",change:"+13.41%"}],
+    topLosers: [{ticker:"DELL",change:"-6.58%"},{ticker:"GSIT",change:"-4.22%"},{ticker:"SNDK",change:"-2.56%"},{ticker:"NBIS",change:"-1.49%"},{ticker:"INTC",change:"-1.28%"}],
+    newsItems: [
+      {ticker:"MRVL",date:"6/02",title:"黄仁勋称Marvell将成下一个万亿美元公司+发布Teralynx T100交换芯片，暴涨32.5%",url:"https://www.tipranks.com/news/why-is-marvell-technology-mrvl-stock-soaring-today-june-2-2026"},
+      {ticker:"COHR",date:"6/02",title:"NVIDIA投资$20亿+黄仁勋光通信言论催化，涨17.6%创历史新高",url:"https://finance.yahoo.com/markets/stocks/articles/coherent-advances-16-lumentum-climbs-164337686.html"},
+      {ticker:"LITE",date:"6/02",title:"NVIDIA $20亿投资+AI光模块需求爆发，涨13.7%突破$1000",url:"https://finance.yahoo.com/quote/LITE/"},
+      {ticker:"GLW",date:"6/02",title:"NVIDIA $5亿投资光纤连接+数据中心光纤需求激增，涨13.4%突破$200",url:"https://finance.yahoo.com/quote/GLW/"},
+      {ticker:"LWLG",date:"6/02",title:"光通信板块全面爆发带动电光聚合物概念，涨15.4%",url:"https://finance.yahoo.com/quote/LWLG/"},
+      {ticker:"AVGO",date:"6/02",title:"明日盘后发布Q2财报，EPS预期$2.40，期权隐含波动10.7%",url:"https://finance.yahoo.com/quote/AVGO/"},
+      {ticker:"BE",date:"6/02",title:"数据中心分布式发电需求持续增长，涨10.7%突破$300",url:"https://finance.yahoo.com/quote/BE/"},
+      {ticker:"CLS",date:"6/02",title:"AI服务器代工订单持续增长，涨10.8%至$472",url:"https://finance.yahoo.com/quote/CLS/"},
+      {ticker:"ALAB",date:"6/02",title:"PCIe/CXL连接芯片受AI互连需求推动，涨11.1%至$355",url:"https://finance.yahoo.com/quote/ALAB/"},
+      {ticker:"DELL",date:"6/02",title:"前两日暴涨40%+后获利回吐，跌6.6%至$435",url:"https://finance.yahoo.com/quote/DELL/"},
+      {ticker:"NBIS",date:"6/02",title:"前OpenAI研究员Aschenbrenner基金买入5.6%股权",url:"https://finance.yahoo.com/quote/NBIS/"},
+      {ticker:"SMCI",date:"6/02",title:"与Gorilla Technology签署$20亿亚太AI基础设施合作",url:"https://finance.yahoo.com/quote/SMCI/"}
+    ],
+    notes: "光通信板块全面爆发！黄仁勋Computex称Marvell将成'下一个万亿美元公司'并强调光互连重要性，MRVL涨32.5%领涨。NVIDIA已向光通信公司投资超$65亿(COHR $20亿、LITE $20亿、GLW $5亿)。47只中41涨6跌，AVGO明日盘后财报是本周最大催化剂。"
+  }
+];
+
+function renderChangelog() {
+  const container = document.getElementById('changelogContent');
+  if (!container) return;
+
+  let html = '';
+  updateLogs.forEach((log, i) => {
+    const isFirst = i === 0;
+    html += `<div class="log-entry${isFirst ? ' open' : ''}">`;
+    html += `<div class="log-header" onclick="this.parentElement.classList.toggle('open')">`;
+    html += `<div><div class="log-date">${log.date}</div><div class="log-date-sub">${log.weekday} · 数据来源: ${log.source}</div></div>`;
+    html += `<div class="log-summary">`;
+    html += `<span class="log-badge price">📊 ${log.priceUpdated}只股价更新</span>`;
+    html += `<span class="log-badge news">📰 ${log.newsUpdated.length}只新闻更新</span>`;
+    html += `</div>`;
+    html += `<span class="log-toggle">▼</span>`;
+    html += `</div>`;
+
+    html += `<div class="log-body">`;
+
+    html += `<div class="log-section"><h4>🔥 涨幅前五</h4><div class="log-price-grid">`;
+    log.topGainers.forEach(g => {
+      html += `<div class="log-price-item"><span class="ticker">${g.ticker}</span><span class="green bold">${g.change}</span></div>`;
+    });
+    html += `</div></div>`;
+
+    html += `<div class="log-section"><h4>📉 跌幅前五</h4><div class="log-price-grid">`;
+    log.topLosers.forEach(g => {
+      html += `<div class="log-price-item"><span class="ticker">${g.ticker}</span><span class="red bold">${g.change}</span></div>`;
+    });
+    html += `</div></div>`;
+
+    if (log.newsItems && log.newsItems.length > 0) {
+      html += `<div class="log-section"><h4>📰 新闻更新 (${log.newsItems.length}条)</h4>`;
+      log.newsItems.forEach(n => {
+        html += `<div class="log-news-item"><div class="news-ticker">${n.ticker} <span style="font-weight:400;color:#999;margin-left:6px">${n.date || ''}</span></div><div class="news-title">${n.url ? `<a href="${n.url}" target="_blank" style="color:#333;text-decoration:none">${n.title}</a>` : n.title}</div></div>`;
+      });
+      html += `</div>`;
+    }
+
+    if (log.fundamentals && log.fundamentals.length > 0) {
+      html += `<div class="log-section"><h4>📈 基本面刷新 (${log.fundamentals.length}项)</h4><div class="log-price-grid">`;
+      log.fundamentals.forEach(f => {
+        const isUp = f.field === '目标价' && parseFloat((f.new||'').replace(/[$,]/g,'')) > parseFloat((f.old||'').replace(/[$,]/g,''));
+        const cls = isUp ? 'green' : (f.field === '目标价' && !isUp ? 'red' : '');
+        html += `<div class="log-price-item" style="flex-direction:column;align-items:flex-start;gap:2px"><div style="display:flex;justify-content:space-between;width:100%"><span class="ticker">${f.ticker}</span><span style="font-size:11px;color:#888">${f.field}</span></div><div style="display:flex;gap:6px;align-items:center;font-size:11px"><span style="color:#999;text-decoration:line-through">${f.old}</span><span>→</span><span class="${cls} bold">${f.new}</span></div><div style="font-size:10px;color:#999">${f.note}</div></div>`;
+      });
+      html += `</div></div>`;
+    }
+
+    if (log.notes) {
+      html += `<div class="log-section"><h4>💡 要点</h4><p style="font-size:13px;color:#555;line-height:1.7">${log.notes}</p></div>`;
+    }
+
+    html += `</div></div>`;
+  });
+
+  if (updateLogs.length === 0) {
+    html = '<div class="empty">暂无更新日志</div>';
+  }
+
+  container.innerHTML = html;
+}
+
+// ============ INIT ============
+stocks.forEach(s => {
+  const p = companyProfiles[s.ticker];
+  if (p && p.earningsDate) s.earningsDate = p.earningsDate;
+});
+document.getElementById('stockCount').textContent = stocks.length;
+initCatFilter();
+initCompCatFilter();
+renderTable();
+renderNews();
+</script>
+</body>
+</html>
