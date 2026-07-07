@@ -379,6 +379,8 @@ tbody tr.cat-row td { font-weight: 700; font-size: 13px; padding: 10px 8px; colo
 
 
 
+
+
 /* Institutional Portfolio Workspace */
 :root {
   --pm-bg: #eef2f6;
@@ -1457,6 +1459,8 @@ tbody tr:hover,
 
 
 
+
+
 <!-- PORTFOLIO MANAGER STATUS BAR -->
 <div class="pm-command-bar" aria-label="portfolio status">
   <div class="pm-command-item">
@@ -1547,6 +1551,7 @@ tbody tr:hover,
 
 
 
+
   <div class="controls">
     <label>类别</label>
     <select id="filterCat" onchange="renderTable()"><option value="">全部</option></select>
@@ -1560,6 +1565,8 @@ tbody tr:hover,
     </table>
   </div>
 </div>
+
+
 
 
 
@@ -2385,6 +2392,7 @@ let sortCol = null, sortDir = 1;
 
 
 
+
 const columns = [
   {key:'idx',label:'#',w:30},
   {key:'ticker',label:'代码',w:60},
@@ -2477,6 +2485,7 @@ function sortData(data) {
 
 
 
+
 function renderTable() {
   const filtered = sortData(getFiltered());
   document.getElementById('countBadge').textContent = filtered.length+' 只';
@@ -2523,6 +2532,7 @@ function initCompCatFilter() {
 function toggleCompanyCard(el) {
   el.closest('.company-card').classList.toggle('open');
 }
+
 
 
 
@@ -2755,6 +2765,8 @@ function renderChangelog() {
 
   container.innerHTML = html;
 }
+
+
 
 
 
@@ -3539,11 +3551,25 @@ function renderAdviceChart(currentNav, currentReturn, canRecord) {
   const history = adviceHistory()
     .filter(r => Number.isFinite(Number(r.nav)))
     .sort((a, b) => String(a.date).localeCompare(String(b.date)));
-  const points = history.map(r => { return { date: r.date, nav: Number(r.nav), saved: true }; });
-  if (canRecord) {
+  const points = history.map(r => {
+    return {
+      date: r.date,
+      nav: Number(r.nav),
+      base: Number(r.base),
+      saved: true
+    };
+  });
+  const hasCurrentRecord = points.some(p => p.date === adviceMeta.batch_date);
+  if (canRecord && !hasCurrentRecord) {
     points.push({ date: adviceMeta.batch_date, nav: currentNav, saved: false });
   } else if (!points.length) {
     points.push({ date: adviceMeta.batch_date, nav: currentNav, saved: false });
+  }
+  if (points.length === 1) {
+    const denominator = 1 + (Number(currentReturn) || 0) / 100;
+    const impliedBase = Math.abs(denominator) > 0.001 ? currentNav / denominator : currentNav;
+    const recordedBase = Number.isFinite(points[0].base) && points[0].base > 0 ? points[0].base : impliedBase;
+    points.unshift({ date: '基准', nav: recordedBase, saved: true, synthetic: true });
   }
   const width = 360, height = 128, padX = 18, padY = 18;
   const values = points.map(p => p.nav);
