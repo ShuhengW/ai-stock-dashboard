@@ -459,6 +459,8 @@ tbody tr.cat-row td { font-weight: 700; font-size: 13px; padding: 10px 8px; colo
 
 
 
+
+
 /* Institutional Portfolio Workspace */
 :root {
   --pm-bg: #eef2f6;
@@ -1617,6 +1619,8 @@ tbody tr:hover,
 
 
 
+
+
 <!-- PORTFOLIO MANAGER STATUS BAR -->
 <div class="pm-command-bar" aria-label="portfolio status">
   <div class="pm-command-item">
@@ -1747,6 +1751,7 @@ tbody tr:hover,
 
 
 
+
   <div class="controls">
     <label>类别</label>
     <select id="filterCat" onchange="renderTable()"><option value="">全部</option></select>
@@ -1760,6 +1765,8 @@ tbody tr:hover,
     </table>
   </div>
 </div>
+
+
 
 
 
@@ -2721,6 +2728,7 @@ let sortCol = null, sortDir = 1;
 
 
 
+
 const columns = [
   {key:'idx',label:'#',w:30},
   {key:'ticker',label:'代码',w:60},
@@ -2853,6 +2861,7 @@ function sortData(data) {
 
 
 
+
 function renderTable() {
   const filtered = sortData(getFiltered());
   document.getElementById('countBadge').textContent = filtered.length+' 只';
@@ -2899,6 +2908,7 @@ function initCompCatFilter() {
 function toggleCompanyCard(el) {
   el.closest('.company-card').classList.toggle('open');
 }
+
 
 
 
@@ -3378,6 +3388,8 @@ function renderChangelog() {
 
 
 
+
+
 // ============ POSITION ADVICE INTEGRATION ============
 const adviceMeta = {"batch_date": "2026-07-14", "is_trading_day": true, "can_record_nav": true, "data_is_stale": false, "expected_data_date": "2026-07-14", "market_snapshot_term": "收盘快照", "is_preclose_snapshot": false, "market_note": "2026-07-14 收盘价已可用于建议组合净值入账；组合收益按页面目标权重和 TradingView 日线涨跌估算。", "universe_count": 48, "news_latest_label": "2026-07-14 19:23 UTC / 2026-07-14 12:23 PT", "fundamentals_latest_label": "2026-07-09 21:42 UTC / 2026-07-09 14:42 PT", "news_item_count": 7, "macro_news_count": 2, "ticker_news_count": 5, "social_latest_label": "2026-07-14 19:23 UTC / 2026-07-14 12:23 PT", "social_ticker_count": 48, "social_item_count": 0, "social_heat_counts": {"No data": 48}, "social_sentiment_counts": {"Unavailable": 48}, "cash_weight": "22%", "etf_weight": "3%", "stock_weight": "75%", "target_update_note": "今日动作、目标仓位和新闻决策口径每天美股收盘前45分钟锁定；收盘后不再改当天建议，只做收盘价、组合净值入账和复盘。", "news_decision_note": "今日动作只使用收盘前45分钟可见新闻和市场情绪；盘后新增信号进入次日关注，不回写当天建议。", "nav_record_note": "收盘价格和建议组合净值在美股收盘后、完整收盘价可用时更新；未开盘或非完整交易日保持基准。", "server_nav": "102.63", "server_nav_return": "2.49%", "technical_counts": {"Underweight": 41, "Watch": 2, "Overweight": 4, "Hold": 1}, "review_counts": {"Hold": 13, "Underweight": 23, "Sell": 12}, "action_counts": {"Hold; eligible for rerun": 1, "Hold / no new add": 11, "Hold but tighten risk": 1, "Reduce / keep light": 23, "Sell / avoid new position": 12}, "news_bias_counts": {"No fresh headlines": 43, "Mixed/Neutral": 1, "Positive": 3, "Negative": 1}};
 const advicePortfolio = [{"ticker": "Cash", "target_weight": "22%", "role": "现金/机动仓", "note": "现金底线20%；7/14快照不产生行情贡献。"}, {"ticker": "VOO_OR_SPY", "target_weight": "3%", "role": "标普500 ETF底仓", "note": "市场底仓控制在5%；给高弹性AI股票让出空间。"}, {"ticker": "AMD", "target_weight": "11%", "role": "AI chip offensive", "note": "7/14快照：技术偏强，新闻偏利好；20日7.15%，回撤-6.26%。"}, {"ticker": "DELL", "target_weight": "9%", "role": "AI server / enterprise hardware", "note": "7/14快照：技术偏强，暂无新消息；20日15.67%，回撤-2.54%。"}, {"ticker": "SIMO", "target_weight": "8%", "role": "Storage controller semiconductor", "note": "7/14快照：技术偏强，暂无新消息；20日9.95%，回撤-13.12%。"}, {"ticker": "ETN", "target_weight": "6%", "role": "AI power infrastructure", "note": "7/14快照：技术偏强，暂无新消息；20日6.17%，回撤-4.86%。"}, {"ticker": "NVDA", "target_weight": "6%", "role": "AI core", "note": "7/14快照：技术观察，新闻中性；20日3.22%，回撤-10.46%。"}, {"ticker": "MU", "target_weight": "5%", "role": "Memory cycle", "note": "7/14快照：技术偏弱，新闻偏利好；20日0.15%，回撤-21.66%。"}, {"ticker": "GEV", "target_weight": "4%", "role": "AI power infrastructure", "note": "7/14快照：技术持有，暂无新消息；20日13.33%，回撤-10.86%。"}, {"ticker": "CRDO", "target_weight": "4%", "role": "AI connectivity", "note": "7/14快照：技术偏弱，暂无新消息；20日-5.83%，回撤-23.48%。"}, {"ticker": "AMKR", "target_weight": "3%", "role": "Advanced packaging / testing", "note": "7/14快照：技术偏弱，暂无新消息；20日-15.2%，回撤-27.39%。"}, {"ticker": "AVGO", "target_weight": "2%", "role": "AI networking / ASIC", "note": "7/14快照：技术偏弱，暂无新消息；20日1.84%，回撤-21.39%。"}, {"ticker": "INTC", "target_weight": "2%", "role": "Turnaround semiconductor", "note": "7/14快照：技术偏弱，新闻偏利好；20日-13.49%，回撤-24.3%。"}, {"ticker": "WDC", "target_weight": "2%", "role": "Storage", "note": "7/14快照：技术偏弱，暂无新消息；20日0.07%，回撤-29.57%。"}, {"ticker": "STX", "target_weight": "2%", "role": "Storage", "note": "7/14快照：技术偏弱，暂无新消息；20日-5.66%，回撤-23.29%。"}, {"ticker": "SNDK", "target_weight": "2%", "role": "Storage", "note": "7/14快照：技术偏弱，暂无新消息；20日-11.23%，回撤-25.34%。"}, {"ticker": "VRT", "target_weight": "1%", "role": "Data center power / cooling", "note": "7/14快照：技术偏弱，暂无新消息；20日0.23%，回撤-20.1%。"}, {"ticker": "ALAB", "target_weight": "1%", "role": "AI connectivity growth", "note": "7/14快照：技术偏弱，暂无新消息；20日-1.46%，回撤-27.57%。"}, {"ticker": "APLD", "target_weight": "1%", "role": "AI infrastructure optionality", "note": "7/14快照：技术偏弱，暂无新消息；20日-33.33%，回撤-43.87%。"}, {"ticker": "NBIS", "target_weight": "1%", "role": "AI cloud optionality", "note": "7/14快照：技术偏弱，暂无新消息；20日-16.47%，回撤-35.27%。"}, {"ticker": "AAOI", "target_weight": "1%", "role": "Optical networking optionality", "note": "7/14快照：技术偏弱，暂无新消息；20日-25.79%，回撤-46.31%。"}, {"ticker": "COHR", "target_weight": "1%", "role": "Optical components", "note": "7/14快照：技术偏弱，暂无新消息；20日-19.29%，回撤-29.37%。"}, {"ticker": "CIEN", "target_weight": "1%", "role": "Networking infrastructure", "note": "7/14快照：技术偏弱，暂无新消息；20日0.21%，回撤-29.89%。"}, {"ticker": "SANM", "target_weight": "1%", "role": "AI hardware supply chain", "note": "7/14快照：技术偏弱，暂无新消息；20日-18.66%，回撤-28.09%。"}, {"ticker": "MRVL", "target_weight": "1%", "role": "AI networking optionality", "note": "7/14快照：技术偏弱，暂无新消息；20日-20.47%，回撤-32.57%。"}];
@@ -3504,20 +3516,40 @@ function adviceCleanText(value) {
 
 function advicePortfolioRole(row) {
   const role = adviceCleanText(row.role);
-  let note = adviceCleanText(row.note);
-  const daily = adviceByTicker(adviceDailyJudgment, row.ticker);
-  const strategic = advicePct(row.target_weight);
-  const today = adviceWeightBounds(daily.target_weight);
-  if (daily.target_weight && today.max >= 0 && strategic > today.max + 0.25) {
-    const extra = `今日执行区间 ${daily.target_weight}；先按今日区间，复核通过后再上调。`;
-    note = [note, extra].filter(Boolean).join(' ');
-  }
+  const note = adviceCleanText(row.note);
   return [role, note.trim() || '--'];
 }
 
 function advicePreviousWeight(row) {
   const previous = advicePreviousPortfolio.find(p => p.ticker === row.ticker);
   return previous ? advicePct(previous.target_weight) : 0;
+}
+
+function advicePortfolioForTicker(ticker) {
+  return advicePortfolio.find(p => p.ticker === ticker) || {};
+}
+
+function advicePmDailyWeight(row) {
+  const portfolio = advicePortfolioForTicker(row.ticker);
+  return portfolio.target_weight || row.target_weight || '--';
+}
+
+function advicePmDailyAction(row) {
+  const portfolio = advicePortfolioForTicker(row.ticker);
+  const current = advicePct(portfolio.target_weight);
+  if (!portfolio.ticker) return adviceLabel(row.daily_action);
+  const previous = advicePreviousWeight(portfolio);
+  const diff = current - previous;
+  if (diff > 0.25) return diff >= 2 ? '增配，分批执行' : '小幅增配';
+  if (diff < -0.25) return diff <= -2 ? '减仓，降风险' : '小幅减仓';
+  if (current <= 0) return '回避，不新开';
+  if (/Sell|avoid/i.test(row.daily_action || '')) return '轻仓观察';
+  if (/Reduce|tighten/i.test(row.daily_action || '')) return '持有，控制仓位';
+  return '持有，按目标执行';
+}
+
+function advicePmDailySortValue(row) {
+  return advicePct(advicePmDailyWeight(row));
 }
 
 function adviceTargetDelta(row) {
@@ -3581,13 +3613,13 @@ function advicePortfolioRisk(row) {
 function advicePortfolioExecution(row) {
   if (row.ticker === 'Cash') return `<span class="advice-risk low">现金 ${adviceEscape(row.target_weight || adviceMeta.cash_weight || '--')}</span>`;
   if (row.ticker === 'VOO_OR_SPY') return `<span class="advice-risk mid">底仓 ${adviceEscape(row.target_weight || adviceMeta.etf_weight || '--')}</span>`;
-  const daily = adviceByTicker(adviceDailyJudgment, row.ticker);
-  if (!daily.target_weight) return '<span class="advice-risk mid">待更新</span>';
-  const strategic = advicePct(row.target_weight);
-  const today = adviceWeightBounds(daily.target_weight);
-  const capped = today.max >= 0 && strategic > today.max + 0.25;
-  const cls = capped ? 'advice-risk elevated' : 'advice-risk mid';
-  return `<span class="${cls}">今日 ${adviceEscape(daily.target_weight)}</span>`;
+  const current = advicePct(row.target_weight);
+  const previous = advicePreviousWeight(row);
+  const diff = current - previous;
+  if (!previous && current > 0) return `<span class="advice-delta new">新增 ${current.toFixed(0)}%</span>`;
+  if (diff > 0.25) return `<span class="advice-delta up">增配到 ${adviceEscape(row.target_weight)}</span>`;
+  if (diff < -0.25) return `<span class="advice-delta down">降到 ${adviceEscape(row.target_weight)}</span>`;
+  return `<span class="advice-delta flat">维持 ${adviceEscape(row.target_weight || '--')}</span>`;
 }
 
 function adviceStrategicWeight(row) {
@@ -3599,9 +3631,9 @@ function adviceStrategicWeight(row) {
 function advicePill(value) {
   const raw = String(value || '');
   let cls = 'info';
-  if (/Overweight|Buy|Positive|Hold|eligible|偏正面|升温|活跃/.test(raw)) cls = 'good';
-  if (/Watch|Mixed|Neutral|Underweight|Reduce|中性|正常|偏低/.test(raw)) cls = 'watch';
-  if (/Sell|Avoid|Negative|weak|回避|偏利空|偏负面/.test(raw)) cls = 'bad';
+  if (/Overweight|Buy|Positive|Hold|eligible|增配|加仓|上调|偏正面|升温|活跃/.test(raw)) cls = 'good';
+  if (/Watch|Mixed|Neutral|Underweight|Reduce|中性|正常|偏低|观察|维持|控制/.test(raw)) cls = 'watch';
+  if (/Sell|Avoid|Negative|weak|减仓|降风险|降低|回避|偏利空|偏负面/.test(raw)) cls = 'bad';
   return `<span class="advice-pill ${cls}">${adviceEscape(adviceLabel(raw))}</span>`;
 }
 
@@ -3655,7 +3687,7 @@ function adviceRows(tableId, headers, rows) {
 
 function adviceInitFilters() {
   const actionSel = document.getElementById('adviceActionFilter');
-  [...new Set(adviceDailyJudgment.map(r => r.daily_action).filter(Boolean))].forEach(v => {
+  [...new Set(adviceDailyJudgment.map(r => advicePmDailyAction(r)).filter(Boolean))].forEach(v => {
     const o = document.createElement('option'); o.value = v; o.textContent = adviceLabel(v); actionSel.appendChild(o);
   });
   const biasSel = document.getElementById('adviceNewsBiasFilter');
@@ -4285,22 +4317,23 @@ function renderAdviceDaily() {
   const filter = document.getElementById('adviceActionFilter').value;
   const q = (document.getElementById('adviceDailySearch').value || '').toLowerCase();
   let rows = adviceDailyJudgment.filter(r => {
-    if (filter && r.daily_action !== filter) return false;
-    const blob = [r.ticker, adviceDailyReason(r), adviceLabel(r.daily_action), adviceLabel(r.final_rating), adviceLabel(r.news_bias)].join(' ').toLowerCase();
+    const action = advicePmDailyAction(r);
+    if (filter && action !== filter) return false;
+    const blob = [r.ticker, adviceDailyReason(r), action, advicePmDailyWeight(r), adviceLabel(r.final_rating), adviceLabel(r.news_bias)].join(' ').toLowerCase();
     return !q || blob.includes(q);
   });
   if (adviceDailySort.key === 'target_weight') {
     const direction = adviceDailySort.direction === 'asc' ? 1 : -1;
     rows = [...rows].sort((a, b) => {
-      const diff = adviceWeightSortValue(a.target_weight) - adviceWeightSortValue(b.target_weight);
+      const diff = advicePmDailySortValue(a) - advicePmDailySortValue(b);
       if (Math.abs(diff) > 0.0001) return diff * direction;
       return String(a.ticker || '').localeCompare(String(b.ticker || ''));
     });
   }
   adviceRows('adviceDailyTable', [
     { label: '股票', html: r => `<span class="ticker">${adviceEscape(r.ticker)}</span>` },
-    { label: '今日动作', html: r => advicePill(r.daily_action) },
-    { label: '今日执行区间', key: 'target_weight', sortKey: 'target_weight' },
+    { label: '今日动作', html: r => advicePill(advicePmDailyAction(r)) },
+    { label: '今日目标', html: r => adviceEscape(advicePmDailyWeight(r)), sortKey: 'target_weight' },
     { label: '信心', html: r => adviceEscape(adviceConfidence(r.confidence)) },
     { label: '综合', html: r => advicePill(r.final_rating) },
     { label: '技术面', html: r => `<span class="advice-signal">${advicePill(r.first_layer_rating)}</span>` },
