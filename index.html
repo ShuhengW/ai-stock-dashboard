@@ -461,6 +461,8 @@ tbody tr.cat-row td { font-weight: 700; font-size: 13px; padding: 10px 8px; colo
 
 
 
+
+
 /* Institutional Portfolio Workspace */
 :root {
   --pm-bg: #eef2f6;
@@ -1621,6 +1623,8 @@ tbody tr:hover,
 
 
 
+
+
 <!-- PORTFOLIO MANAGER STATUS BAR -->
 <div class="pm-command-bar" aria-label="portfolio status">
   <div class="pm-command-item">
@@ -1752,6 +1756,7 @@ tbody tr:hover,
 
 
 
+
   <div class="controls">
     <label>类别</label>
     <select id="filterCat" onchange="renderTable()"><option value="">全部</option></select>
@@ -1765,6 +1770,8 @@ tbody tr:hover,
     </table>
   </div>
 </div>
+
+
 
 
 
@@ -2179,6 +2186,15 @@ tbody tr:hover,
           </div>
         </div>
         <div class="advice-body"><div class="pm-mini-list" id="pmRiskBudget"></div></div>
+      </div>
+      <div class="advice-section">
+        <div class="advice-section-head">
+          <div>
+            <div class="advice-section-title">因子权重</div>
+            <div class="advice-section-note">仓位评分模型，偏向AI部署落地</div>
+          </div>
+        </div>
+        <div class="advice-body"><div class="pm-mini-list" id="pmFactorWeights"></div></div>
       </div>
       <div class="advice-section">
         <div class="advice-section-head">
@@ -2729,6 +2745,7 @@ let sortCol = null, sortDir = 1;
 
 
 
+
 const columns = [
   {key:'idx',label:'#',w:30},
   {key:'ticker',label:'代码',w:60},
@@ -2862,6 +2879,7 @@ function sortData(data) {
 
 
 
+
 function renderTable() {
   const filtered = sortData(getFiltered());
   document.getElementById('countBadge').textContent = filtered.length+' 只';
@@ -2908,6 +2926,7 @@ function initCompCatFilter() {
 function toggleCompanyCard(el) {
   el.closest('.company-card').classList.toggle('open');
 }
+
 
 
 
@@ -3181,6 +3200,8 @@ function renderChangelog() {
 
   container.innerHTML = html;
 }
+
+
 
 
 
@@ -3879,6 +3900,17 @@ function renderPmRiskBudget() {
   document.getElementById('pmRiskBudget').innerHTML = rows.map(r => pmRiskBudgetRow(...r)).join('');
 }
 
+function renderPmFactorWeights() {
+  const rows = [
+    ['技术趋势', 28, '价格趋势、20/50日均线、动量、RSI和回撤位置。它决定能不能顺势加仓。', '#2f5f8f'],
+    ['新闻情绪', 24, '收盘前45分钟可见的宏观、个股新闻和市场情绪。明确订单、上调、财报指引会加分。', '#7a5a24'],
+    ['AI部署主线', 25, '更偏向AI已经进入部署和订单兑现的链条：芯片、服务器、互连、内存、先进封装、电力。', '#8f4d2f'],
+    ['风险控制', 14, '波动率、回撤、单票集中度、小盘流动性和弱势风险，决定仓位上限。', '#a2312a'],
+    ['基本面质量', 9, '估值、EPS、财报日、市值和业务质量。成长股不机械按PE排除，但会限制过度追高。', '#58724f'],
+  ];
+  document.getElementById('pmFactorWeights').innerHTML = rows.map(r => pmRiskBudgetRow(r[0], r[1], 30, r[2], r[3], '权重')).join('');
+}
+
 function pmChangeReason(ticker) {
   if (ticker === 'Cash') return '风险预算和机动仓';
   if (ticker === 'VOO_OR_SPY') return '降低市场底仓，把主动风险留给AI链条';
@@ -4045,6 +4077,7 @@ function renderPmMemos() {
 function renderPmProfessionalModules() {
   renderPmGovernance();
   renderPmRiskBudget();
+  renderPmFactorWeights();
   renderPmPositionChanges();
   renderPmDataQuality();
   renderPmAttribution();
