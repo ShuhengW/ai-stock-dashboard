@@ -3615,9 +3615,11 @@ function portfolioSortBy(key) {
   renderAdvicePortfolio();
 }
 function qualitativeScore(value) {
+  if (value == null || String(value).trim() === '') return '--';
   const v = Number(value);
   if (!Number.isFinite(v)) return '--';
-  return v >= 70 ? '较强' : v >= 45 ? '中性' : '偏弱';
+  const [label, tone] = v >= 70 ? ['较强', 'good'] : v >= 45 ? ['中性', 'watch'] : ['偏弱', 'bad'];
+  return `<span class="advice-pill ${tone}">${label}</span>`;
 }
 function adviceTodayActionText(row) {
   const current = advicePct(row.target_weight), previous = advicePreviousTargetWeight(row);
